@@ -1,0 +1,27 @@
+[package]
+name = "metanoid_game"
+version = "0.1.0"
+edition = "2024"
+
+[[bin]]
+name = "metanoid"
+path = "src/main.rs"
+
+[dependencies]
+metanoid_core = { path = "../metanoid_core" }
+metanoid_procgen = { path = "../metanoid_procgen" }
+metanoid_vfx = { path = "../metanoid_vfx" }
+metanoid_audio = { path = "../metanoid_audio" }
+metanoid_ui = { path = "../metanoid_ui" }
+bevy = { workspace = true }
+avian2d = { workspace = true }
+bevy_asset_loader = { workspace = true }
+bevy_hanabi = { workspace = true }
+bevy_enoki = { workspace = true }
+bevy_firefly = { workspace = true }
+bevy_tweening = { workspace = true }
+bevy_trauma_shake = { workspace = true }
+bevy_kira_audio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+rand = { workspace = true }

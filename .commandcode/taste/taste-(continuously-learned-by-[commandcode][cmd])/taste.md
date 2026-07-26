@@ -1,0 +1,18 @@
+# Taste (Continuously Learned by [CommandCode][cmd])
+- Prefers brief, task-oriented communication — will say "Complete step b6" with minimal context, expects the agent to infer the rest from prior conversation. Confidence: 0.9
+- Prefers modular Rust workspace architecture: one Cargo workspace with domain-separated crates (core/shared, procgen, vfx, audio, ui, game binary). Each crate has a single responsibility. Confidence: 0.9
+- Prefers Rust edition 2024 with `resolver = "3"` in workspace root. Confidence: 0.9
+- Prefers inline `#[cfg(test)] mod tests` blocks within each module rather than separate test files or a `tests/` directory. Confidence: 0.9
+- Expects verification after every change: `cargo check --workspace` after code edits, `cargo test -p <crate>` after implementation. Confidence: 0.9
+- Prefers Bevy 0.19 observer pattern for events (`add_observer`, `On<T>`) over the older `EventReader`/`EventWriter` for gameplay events. Confidence: 0.85
+- Uses `MessageReader<CollisionStart>` with Avian2D 0.7 for collision events (not the old `EventReader<CollisionStarted>`). Confidence: 0.85
+- Uses `Hdr` marker component from `bevy::camera::Hdr` and `ScalingMode::FixedVertical` for 2D camera setup. Confidence: 0.85
+- Prefers `mod.rs` files for module organization with sibling files for each sub-module. Confidence: 0.9
+- Environment is Windows with PowerShell; prefers `powershell -Command "..."` for complex shell operations. Confidence: 0.9
+- When reporting a runtime bug, says "Fix everything from the root" — expects the agent to trace the full causal chain and fix the source issue, not band-aid symptoms. Confidence: 0.9
+- Prefers defensive `Option<T>` wrappers for Bevy resources that might not exist yet (e.g. `Option<ResMut<GameState>>` with early `return` on `None`) rather than assuming resources are always present. Confidence: 0.85
+- Prefers the Bevy default state to be the one that initializes all prerequisite resources (e.g. `Menu` before `Loading`), ensuring resources exist before downstream systems need them. Confidence: 0.85
+- Reports bugs by pasting full error traces and describing observable symptoms (e.g. "gray screen for a few minutes"), expects the agent to investigate root cause proactively before implementing fixes. Confidence: 0.9
+- Prefers material/resource caching in Bevy — reuse `Handle<T>` across entities with the same properties (e.g. `HashMap<(BrickKind, u32), Handle<ColorMaterial>>`) to avoid redundant shader compilations. Confidence: 0.85
+- Prefers two-phase loading for heavy operations: first phase computes data (e.g. `prepare_level` inserts a `PendingLevel` resource), second phase spawns entities from the prepared data (e.g. `loading_ready`). Allows a loading screen to render between phases. Confidence: 0.85
+- Prefers simple loading screen UI (dark background + centered text) spawned on state enter and despawned when loading completes, rather than async or threaded loading. Confidence: 0.8

@@ -1,0 +1,13 @@
+[package]
+name = "metanoid_vfx"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+metanoid_core = { path = "../metanoid_core" }
+bevy = { workspace = true }
+bevy_hanabi = { workspace = true }
+bevy_enoki = { workspace = true }
+bevy_tweening = { workspace = true }
+bevy_trauma_shake = { workspace = true }
+bevy_firefly = { workspace = true }

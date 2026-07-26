@@ -1,0 +1,13 @@
+[package]
+name = "metanoid_procgen"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+metanoid_core = { path = "../metanoid_core" }
+bevy_math = "0.19"
+noiz = { workspace = true }
+rand = { workspace = true }
+rand_chacha = { workspace = true }
+xxhash-rust = { workspace = true }
+serde = { workspace = true }

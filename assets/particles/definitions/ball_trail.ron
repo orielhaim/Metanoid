@@ -1,0 +1,16 @@
+(
+    spawn_rate: 0.02,
+    spawn_amount: 1,
+    emission_shape: Circle(3.0),
+    lifetime: (0.3, 0.1),
+    linear_speed: Some((10.0, 0.5)),
+    direction: Some(((0.0, 1.0), 1.0)),
+    scale: Some((3.0, 0.5)),
+    color: None,
+    scale_curve: Some([(0.0, 1.0), (1.0, 0.0)]),
+    color_curve: Some([
+        (0.0, (r: 1.0, g: 1.0, b: 1.0, a: 0.6)),
+        (1.0, (r: 1.0, g: 1.0, b: 1.0, a: 0.0)),
+    ]),
+    relative_positioning: Some(true),
+)

@@ -1,6 +1,39 @@
-[package]
-name = "metanoid"
-version = "0.1.0"
-edition = "2024"
+[workspace]
+members = [
+    "crates/metanoid_core",
+    "crates/metanoid_procgen",
+    "crates/metanoid_vfx",
+    "crates/metanoid_audio",
+    "crates/metanoid_ui",
+    "crates/metanoid_game",
+]
+resolver = "3"
 
-[dependencies]
+[workspace.dependencies]
+bevy = { version = "0.19", features = ["wayland"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+avian2d = "0.7"
+bevy_asset_loader = "0.27"
+bevy_kira_audio = "0.26"
+bevy_hanabi = { version = "0.19", default-features = false, features = ["2d"] }
+bevy_enoki = "0.7"
+bevy_tweening = "0.16"
+bevy_trauma_shake = "0.8"
+bevy_firefly = "0.19"
+noiz = "0.5"
+rand = "0.10"
+rand_chacha = "0.10"
+xxhash-rust = { version = "0.8", features = ["xxh3"] }
+
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+strip = true
+
+[profile.dev]
+opt-level = 1
+
+[profile.dev.package."*"]
+opt-level = 3

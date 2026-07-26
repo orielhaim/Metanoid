@@ -1,0 +1,9 @@
+[package]
+name = "metanoid_ui"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+metanoid_core = { path = "../metanoid_core" }
+bevy = { workspace = true }
+bevy_tweening = { workspace = true }
