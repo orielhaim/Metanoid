@@ -1,10 +1,13 @@
+pub mod beat;
 pub mod music;
 pub mod sfx;
 pub mod volume;
 
 use bevy::prelude::*;
 use bevy_kira_audio::{AudioApp, AudioPlugin, AudioSource};
+use metanoid_core::resources::beat_clock::BeatClock;
 
+pub use beat::tick_beat_clock;
 pub use music::{MusicAssets, MusicState, MusicTrack, crossfade_to, play_music, track_for_biome};
 pub use volume::{
     AppliedChannelVolumes, apply_settings_volumes, apply_settings_volumes_startup,
@@ -27,11 +30,12 @@ impl Plugin for MetanoidAudioPlugin {
             .init_resource::<SfxAssets>()
             .init_resource::<MusicAssets>()
             .init_resource::<MusicState>()
+            .init_resource::<BeatClock>()
             .init_resource::<AppliedChannelVolumes>()
             // Apply volumes at startup (after GameSettings is inserted by the game binary)
             // and whenever GameSettings changes (settings steppers).
             .add_systems(Startup, apply_settings_volumes_startup)
-            .add_systems(Update, apply_settings_volumes)
+            .add_systems(Update, (apply_settings_volumes, tick_beat_clock))
             .add_observer(sfx::on_ball_paddle_bounce)
             .add_observer(sfx::on_ball_wall_bounce)
             .add_observer(sfx::on_brick_hit)

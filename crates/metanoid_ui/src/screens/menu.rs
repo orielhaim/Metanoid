@@ -6,7 +6,8 @@ use metanoid_core::states::AppState;
 
 use crate::theme::UiTheme;
 use crate::widgets::{
-    primary_button_colors, secondary_button_colors, spawn_label, styled_button_node,
+    entrance_scale, primary_button_colors, secondary_button_colors, spawn_label, spawn_title,
+    styled_button_node,
 };
 
 #[derive(Component)]
@@ -20,6 +21,19 @@ pub struct GalaxyMapButton;
 
 #[derive(Component)]
 pub struct SettingsMenuButton;
+
+/// Pulsing glow behind the game title.
+#[derive(Component)]
+pub struct TitleGlow;
+
+/// Gentle pulsing halo under the title.
+pub fn tick_title_glow(time: Res<Time>, mut q: Query<&mut UiTransform, With<TitleGlow>>) {
+    let t = time.elapsed_secs();
+    for mut transform in &mut q {
+        let s = 1.0 + (t * 1.4).sin() * 0.06;
+        transform.scale = Vec2::splat(s);
+    }
+}
 
 pub fn setup_menu(mut commands: Commands, save: Res<SaveData>, theme: Res<UiTheme>) {
     let mastery = mastery_percent(&save);
@@ -64,9 +78,20 @@ pub fn setup_menu(mut commands: Commands, save: Res<SaveData>, theme: Res<UiThem
                 row_gap: Val::Px(12.0),
                 ..default()
             },
-            BackgroundColor(theme.bg_deep),
+            BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.0)),
         ))
         .with_children(|root| {
+            // Dark scrim so text stays readable over the animated backdrop.
+            root.spawn(Node {
+                position_type: PositionType::Absolute,
+                left: Val::Px(0.0),
+                right: Val::Px(0.0),
+                top: Val::Px(0.0),
+                bottom: Val::Px(0.0),
+                ..default()
+            })
+            .insert(BackgroundColor(Color::srgba(0.01, 0.012, 0.05, 0.68)));
+
             // Career strip
             root.spawn((
                 Node {
@@ -119,8 +144,28 @@ pub fn setup_menu(mut commands: Commands, save: Res<SaveData>, theme: Res<UiThem
                 margin: UiRect::vertical(Val::Px(20.0)),
                 ..default()
             })
+            .insert(entrance_scale(0.05, 0.5))
             .with_children(|title| {
-                spawn_label(title, "METANOID", theme.font_title, theme.accent);
+                // Glow halo behind the wordmark.
+                title
+                    .spawn(Node {
+                        position_type: PositionType::Absolute,
+                        left: Val::Percent(50.0),
+                        top: Val::Percent(50.0),
+                        width: Val::Px(520.0),
+                        height: Val::Px(110.0),
+                        border_radius: BorderRadius::all(Val::Px(60.0)),
+                        ..default()
+                    })
+                    .insert((
+                        TitleGlow,
+                        UiTransform {
+                            translation: Val2::px(-260.0, -60.0),
+                            ..default()
+                        },
+                        BackgroundColor(Color::srgba(0.2, 0.5, 1.0, 0.10)),
+                    ));
+                spawn_title(title, "METANOID", theme.font_title, theme.accent);
                 spawn_label(
                     title,
                     "Infinite Breakout  -  Competitive",
@@ -140,6 +185,7 @@ pub fn setup_menu(mut commands: Commands, save: Res<SaveData>, theme: Res<UiThem
                 pbg,
                 pbd,
             ))
+            .insert(entrance_scale(0.18, 0.6))
             .with_children(|btn| {
                 spawn_label(
                     btn,
@@ -164,6 +210,7 @@ pub fn setup_menu(mut commands: Commands, save: Res<SaveData>, theme: Res<UiThem
                 sbg.clone(),
                 sbd.clone(),
             ))
+            .insert(entrance_scale(0.3, 0.6))
             .with_children(|btn| {
                 spawn_label(btn, "GALAXY MAP", 20.0, theme.text_primary);
             });
@@ -183,6 +230,7 @@ pub fn setup_menu(mut commands: Commands, save: Res<SaveData>, theme: Res<UiThem
                 sbg,
                 sbd,
             ))
+            .insert(entrance_scale(0.42, 0.6))
             .with_children(|btn| {
                 spawn_label(btn, "SETTINGS", 18.0, theme.text_muted);
             });

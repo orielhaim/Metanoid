@@ -24,4 +24,5 @@ pub mod settings;
 pub mod shake;
 pub mod special_bricks;
 pub mod tweens;
+pub mod ui_backdrop;
 pub mod vfx;

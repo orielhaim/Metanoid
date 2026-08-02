@@ -4,28 +4,46 @@ use metanoid_core::components::ball::Ball;
 use metanoid_core::components::brick::{Brick, BrickType};
 use metanoid_core::components::paddle::Paddle;
 use metanoid_core::constants::*;
-use metanoid_procgen::biome::parameters::BiomeParams;
 use metanoid_procgen::level::data::{BrickKind, LevelDefinition, SpecialType};
 use metanoid_procgen::level::generate::free_run_cells;
-use std::collections::HashMap;
+use metanoid_visuals::material::{BrickMatKind, ProceduralMaterials};
 
+use super::level_progression::ActiveLevelVisuals;
 use super::physics_layers::{layers_ball, layers_brick, layers_moving_brick};
 
 #[derive(Component)]
 pub struct LevelEntity;
 
+#[derive(Component)]
+pub struct BrickVisual {
+    pub kind: BrickMatKind,
+    pub max_health: u32,
+    pub bucket: u8,
+}
+
 #[derive(Resource)]
 pub struct PendingLevel {
     pub level: LevelDefinition,
-    pub params: BiomeParams,
+}
+
+fn visual_kind(game_brick_type: BrickType) -> BrickMatKind {
+    match game_brick_type {
+        BrickType::MultiHit => BrickMatKind::MultiHit,
+        BrickType::Invincible => BrickMatKind::Invincible,
+        BrickType::Explosive => BrickMatKind::Explosive,
+        _ => BrickMatKind::Normal,
+    }
+}
+
+fn damage_bucket(health_pct: f32) -> u8 {
+    (health_pct.clamp(0.0, 1.0) * 3.0).round() as u8
 }
 
 pub fn spawn_bricks(
     commands: &mut Commands,
     meshes: &mut Assets<Mesh>,
-    materials: &mut Assets<ColorMaterial>,
     level: &LevelDefinition,
-    params: &BiomeParams,
+    visuals: &ProceduralMaterials,
 ) {
     let m = level.metrics;
     let bw = m.brick_w;
@@ -34,11 +52,9 @@ pub fn spawn_bricks(
     let cell = bw + gap;
 
     let brick_mesh = meshes.add(Rectangle::new(bw, bh));
-    let mut mat_cache: HashMap<(BrickKind, u32), Handle<ColorMaterial>> = HashMap::new();
 
     let start_x = -(level.cols as f32 * cell) / 2.0 + cell / 2.0;
     // Pin the grid to the TOP of the arena (row 0 = uppermost).
-    // Previous formula subtracted full grid height and pushed stages toward the paddle.
     let top_wall_y = (ARENA_HEIGHT - WALL_THICKNESS) / 2.0;
     let top_padding = 18.0;
     let start_y = top_wall_y - WALL_THICKNESS - top_padding - bh * 0.5;
@@ -65,11 +81,8 @@ pub fn spawn_bricks(
             },
         };
 
-        let key = (data.kind, data.health);
-        let material = mat_cache
-            .entry(key)
-            .or_insert_with(|| materials.add(brick_color(data.kind, data.health, params)))
-            .clone();
+        let health_pct = data.health as f32 / data.max_health.max(1) as f32;
+        let material = visuals.brick(visual_kind(game_brick_type), health_pct);
 
         let (free_left, free_right) = free_run_cells(&level.bricks, data.col, data.row);
         // Travel at most into free empty cells, minus a safety margin so AABBs never touch.
@@ -133,6 +146,11 @@ pub fn spawn_bricks(
                 move_max_x,
                 brick_half_w: bw * 0.5,
             },
+            BrickVisual {
+                kind: visual_kind(game_brick_type),
+                max_health: data.max_health,
+                bucket: damage_bucket(health_pct),
+            },
             LevelEntity,
             RigidBody::Kinematic,
             Collider::rectangle(bw, bh),
@@ -145,16 +163,24 @@ pub fn spawn_bricks(
     }
 }
 
-fn brick_color(kind: BrickKind, health: u32, params: &BiomeParams) -> Color {
-    let hue_base = params.temperature * 60.0 + 200.0;
-    match kind {
-        BrickKind::Normal => Color::hsl(hue_base, 0.7, 0.5),
-        BrickKind::MultiHit => {
-            let ratio = health as f32 / 5.0;
-            Color::hsl(50.0 - ratio * 50.0, 0.9, 0.4 + ratio * 0.2)
+/// Swap brick materials as their health changes (cracked / burned look).
+/// Only writes the material when the damage bucket actually changes, so moving /
+/// regenerating bricks don't force a re-extraction every frame.
+pub fn update_brick_damage(
+    visuals: Res<ActiveLevelVisuals>,
+    mut q: Query<(&Brick, &mut BrickVisual, &mut MeshMaterial2d<ColorMaterial>), Changed<Brick>>,
+) {
+    for (brick, mut visual, mut mat) in &mut q {
+        if brick.health == 0 {
+            continue;
         }
-        BrickKind::Invincible => Color::srgb(0.6, 0.6, 0.65),
-        BrickKind::Explosive => Color::hsl(10.0, 0.9, 0.45),
+        let pct = brick.health as f32 / visual.max_health.max(1) as f32;
+        let bucket = damage_bucket(pct);
+        if bucket == visual.bucket {
+            continue;
+        }
+        visual.bucket = bucket;
+        mat.0 = visuals.materials.brick(visual.kind, pct);
     }
 }
 
@@ -162,6 +188,7 @@ pub fn auto_respawn_ball(
     mut commands: Commands,
     balls: Query<&Ball>,
     paddle: Query<&Transform, With<Paddle>>,
+    visuals: Option<Res<ActiveLevelVisuals>>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<ColorMaterial>>,
 ) {
@@ -171,6 +198,10 @@ pub fn auto_respawn_ball(
     let Ok(paddle_t) = paddle.single() else {
         return;
     };
+
+    let ball_mat = visuals
+        .map(|v| v.materials.ball.clone())
+        .unwrap_or_else(|| materials.add(Color::srgb(1.0, 1.0, 1.0)));
 
     commands.spawn((
         Ball::default(),
@@ -187,6 +218,6 @@ pub fn auto_respawn_ball(
         layers_ball(),
         CollisionEventsEnabled,
         Mesh2d(meshes.add(Circle::new(BALL_RADIUS))),
-        MeshMaterial2d(materials.add(Color::srgb(1.0, 1.0, 1.0))),
+        MeshMaterial2d(ball_mat),
     ));
 }

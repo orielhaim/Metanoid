@@ -28,7 +28,13 @@ pub fn start_menu_music(
         return;
     }
     let vol = music_volume(&settings);
-    play_music(MusicTrack::Menu, &music_assets, &audio, vol);
+    play_music(
+        MusicTrack::Menu,
+        &music_assets,
+        &audio,
+        vol,
+        &mut music_state,
+    );
     music_state.current = MusicTrack::Menu;
     info!("Music: menu");
 }
@@ -57,7 +63,7 @@ pub fn start_level_music(
     }
 
     let vol = music_volume(&settings);
-    crossfade_to(track, &music_assets, &audio, vol);
+    crossfade_to(track, &music_assets, &audio, vol, &mut music_state);
     music_state.current = track;
     info!(
         "Music: {:?} (G{} B{} L{})",
@@ -73,6 +79,12 @@ pub fn stop_music_on_game_over(
 ) {
     // Soft return toward menu bed after a short beat; keep playing menu.
     let vol = music_volume(&settings);
-    crossfade_to(MusicTrack::Menu, &music_assets, &audio, vol);
+    crossfade_to(
+        MusicTrack::Menu,
+        &music_assets,
+        &audio,
+        vol,
+        &mut music_state,
+    );
     music_state.current = MusicTrack::Menu;
 }

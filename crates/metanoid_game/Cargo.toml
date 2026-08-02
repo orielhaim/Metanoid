@@ -11,6 +11,7 @@ path = "src/main.rs"
 metanoid_core = { path = "../metanoid_core" }
 metanoid_procgen = { path = "../metanoid_procgen" }
 metanoid_vfx = { path = "../metanoid_vfx" }
+metanoid_visuals = { path = "../metanoid_visuals" }
 metanoid_audio = { path = "../metanoid_audio" }
 metanoid_ui = { path = "../metanoid_ui" }
 bevy = { workspace = true }

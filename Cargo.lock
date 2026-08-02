@@ -3904,6 +3904,7 @@ dependencies = [
  "metanoid_procgen",
  "metanoid_ui",
  "metanoid_vfx",
+ "metanoid_visuals",
  "rand 0.10.2",
  "serde",
  "serde_json",
@@ -3945,6 +3946,19 @@ dependencies = [
  "bevy_trauma_shake",
  "bevy_tweening",
  "metanoid_core",
+]
+
+[[package]]
+name = "metanoid_visuals"
+version = "0.1.0"
+dependencies = [
+ "bevy",
+ "bevy_enoki",
+ "bevy_tweening",
+ "metanoid_core",
+ "metanoid_procgen",
+ "rand 0.10.2",
+ "rand_chacha 0.10.0",
 ]
 
 [[package]]

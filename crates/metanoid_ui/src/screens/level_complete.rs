@@ -6,10 +6,31 @@ use metanoid_core::resources::game_state::GameState;
 use metanoid_core::states::AppState;
 
 use crate::theme::{UiTheme, grade_color};
-use crate::widgets::{primary_button_colors, secondary_button_colors, spawn_label};
+use crate::widgets::{primary_button_colors, secondary_button_colors, spawn_label, spawn_title};
 
 #[derive(Component)]
 pub struct LevelCompleteRoot;
+
+/// Falling confetti pieces.
+#[derive(Component)]
+pub struct Confetti {
+    pub speed: f32,
+    pub phase: f32,
+    pub y: f32,
+}
+
+pub fn tick_confetti(time: Res<Time>, mut q: Query<(&mut Confetti, &mut UiTransform)>) {
+    let dt = time.delta_secs();
+    for (mut confetti, mut transform) in &mut q {
+        confetti.y += confetti.speed * dt * 60.0;
+        if confetti.y > 460.0 {
+            confetti.y = -460.0;
+        }
+        let angle = (time.elapsed_secs() * 4.0 + confetti.phase).sin() * 0.4;
+        transform.translation = Val2::px(0.0, confetti.y);
+        transform.rotation = Rot2::radians(angle);
+    }
+}
 
 #[derive(Component)]
 pub struct ContinueNextButton;
@@ -63,6 +84,11 @@ pub fn setup_level_complete(
         let x = (i as f32 - 24.0) * 18.0;
         commands.spawn((
             LevelCompleteRoot,
+            Confetti {
+                speed: 0.6 + (i as f32 % 5.0) * 0.25,
+                phase: i as f32 * 1.7,
+                y: -(i as f32 % 40.0) * 10.0,
+            },
             Node {
                 position_type: PositionType::Absolute,
                 left: Val::Percent(50.0 + x / 14.0),
@@ -93,7 +119,7 @@ pub fn setup_level_complete(
             BackgroundColor(Color::srgba(0.0, 0.0, 0.08, 0.82)),
         ))
         .with_children(|parent| {
-            spawn_label(parent, title, 48.0, theme.success);
+            spawn_title(parent, title, 48.0, theme.success);
             spawn_label(
                 parent,
                 format!("Galaxy {g}  |  Biome {b}  |  Level {l}"),

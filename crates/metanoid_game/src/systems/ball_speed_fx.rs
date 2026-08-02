@@ -16,23 +16,11 @@ use crate::systems::level_spawner::LevelEntity;
 pub struct SpeedHeatMark {
     pub ball: Entity,
     pub age: f32,
+    pub last_alpha: f32,
 }
 
 #[derive(Resource, Default)]
 pub struct SpeedWhooshCooldown(pub f32);
-
-fn speed_heat_color(t: f32) -> Color {
-    if t < 0.3 {
-        let u = t / 0.3;
-        Color::srgb(1.0, 1.0 - 0.2 * u, 1.0 - 0.1 * u)
-    } else if t < 0.65 {
-        let u = (t - 0.3) / 0.35;
-        Color::srgb(1.0, 0.8 - 0.4 * u, 0.5 - 0.35 * u)
-    } else {
-        let u = ((t - 0.65) / 0.35).clamp(0.0, 1.0);
-        Color::srgb(1.0, 0.35 - 0.15 * u, 0.12)
-    }
-}
 
 fn speed_factor(ball: &Ball, speed: f32) -> f32 {
     let base = ball.speed.max(BALL_SPEED * 0.85);
@@ -42,13 +30,7 @@ fn speed_factor(ball: &Ball, speed: f32) -> f32 {
 /// Recolor the ball when overspeeding; spawn heat marks for new fast balls.
 pub fn update_ball_speed_visuals(
     mut commands: Commands,
-    balls: Query<(
-        Entity,
-        &Ball,
-        &LinearVelocity,
-        &Transform,
-        &MeshMaterial2d<ColorMaterial>,
-    )>,
+    balls: Query<(Entity, &Ball, &LinearVelocity, &Transform)>,
     mut materials: ResMut<Assets<ColorMaterial>>,
     mut meshes: ResMut<Assets<Mesh>>,
     marks: Query<(Entity, &SpeedHeatMark)>,
@@ -59,20 +41,9 @@ pub fn update_ball_speed_visuals(
         }
     }
 
-    for (entity, ball, vel, transform, mat_handle) in &balls {
-        if ball.stuck {
-            if let Some(mut mat) = materials.get_mut(&mat_handle.0) {
-                mat.color = Color::srgb(1.0, 1.0, 1.0);
-            }
-            continue;
-        }
-
+    for (entity, ball, vel, transform) in &balls {
         let speed = vel.0.length();
         let t = speed_factor(ball, speed);
-
-        if let Some(mut mat) = materials.get_mut(&mat_handle.0) {
-            mat.color = speed_heat_color(t);
-        }
 
         if t < 0.12 {
             for (me, mark) in &marks {
@@ -103,6 +74,7 @@ pub fn update_ball_speed_visuals(
             SpeedHeatMark {
                 ball: entity,
                 age: 0.0,
+                last_alpha: 0.0,
             },
             LevelEntity,
             Mesh2d(mesh),
@@ -153,9 +125,13 @@ pub fn update_speed_heat_marks(
         tf.rotation = Quat::from_rotation_z(angle - std::f32::consts::FRAC_PI_2);
         tf.scale = Vec3::new((0.5 + t * 0.55) * pulse, (0.9 + t * 1.2) * pulse, 1.0);
 
-        if let Some(mut mat) = materials.get_mut(&mat_h.0) {
-            let a = (0.2 + t * 0.65).clamp(0.15, 0.9);
-            mat.color = Color::srgba(1.0, 0.1 + 0.22 * (1.0 - t), 0.03, a);
+        // Only rewrite the material when the alpha moves meaningfully.
+        let a = (0.2 + t * 0.65).clamp(0.15, 0.9);
+        if (a - mark.last_alpha).abs() > 0.02 {
+            if let Some(mut mat) = materials.get_mut(&mat_h.0) {
+                mat.color = Color::srgba(1.0, 0.1 + 0.22 * (1.0 - t), 0.03, a);
+                mark.last_alpha = a;
+            }
         }
     }
 }

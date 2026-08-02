@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 use bevy_kira_audio::prelude::AudioChannel;
-use bevy_kira_audio::{AudioControl, AudioTween};
+use bevy_kira_audio::{AudioControl, AudioInstance, AudioTween};
 
 use super::MusicChannel;
 
@@ -47,6 +47,8 @@ pub enum MusicTrack {
 pub struct MusicState {
     pub current: MusicTrack,
     pub volume: f32,
+    /// Instance handle of the currently playing bed, for beat tracking.
+    pub instance: Option<Handle<AudioInstance>>,
 }
 
 impl Default for MusicState {
@@ -54,6 +56,7 @@ impl Default for MusicState {
         Self {
             current: MusicTrack::None,
             volume: 0.3,
+            instance: None,
         }
     }
 }
@@ -63,9 +66,13 @@ pub fn play_music(
     music_assets: &MusicAssets,
     audio: &AudioChannel<MusicChannel>,
     volume: f32,
+    state: &mut MusicState,
 ) {
     let handle = match track {
-        MusicTrack::None => return,
+        MusicTrack::None => {
+            state.instance = None;
+            return;
+        }
         MusicTrack::Menu => music_assets.menu.clone(),
         MusicTrack::Neon => music_assets.neon.clone(),
         MusicTrack::Ocean => music_assets.ocean.clone(),
@@ -79,7 +86,9 @@ pub fn play_music(
     // Always loop background beds.
     let _ = volume;
     audio.stop();
-    audio.play(handle).with_volume(0.0).looped();
+    let mut command = audio.play(handle);
+    state.instance = Some(command.handle());
+    command.with_volume(0.0).looped();
 }
 
 pub fn crossfade_to(
@@ -87,9 +96,11 @@ pub fn crossfade_to(
     music_assets: &MusicAssets,
     audio: &AudioChannel<MusicChannel>,
     volume: f32,
+    state: &mut MusicState,
 ) {
     let handle = match new_track {
         MusicTrack::None => {
+            state.instance = None;
             audio
                 .stop()
                 .fade_out(AudioTween::linear(std::time::Duration::from_millis(500)));
@@ -108,8 +119,9 @@ pub fn crossfade_to(
     audio
         .stop()
         .fade_out(AudioTween::linear(std::time::Duration::from_millis(500)));
-    audio
-        .play(handle)
+    let mut command = audio.play(handle);
+    state.instance = Some(command.handle());
+    command
         .with_volume(0.0)
         .fade_in(AudioTween::linear(std::time::Duration::from_millis(500)))
         .looped();

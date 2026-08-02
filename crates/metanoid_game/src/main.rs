@@ -12,6 +12,7 @@ use metanoid_ui::MetanoidUiPlugin;
 use metanoid_vfx::VfxPlugin;
 use metanoid_vfx::enoki_effects::setup_enoki_effects;
 use metanoid_vfx::particles::setup_particle_effects;
+use metanoid_visuals::VisualsPlugin;
 
 mod systems;
 
@@ -19,7 +20,7 @@ use metanoid_core::SaveData;
 use systems::arena::{
     setup_arena, setup_camera_effects, setup_persistent_camera, teardown_camera_effects,
 };
-use systems::background::{parallax_shift, setup_background};
+use systems::background::{setup_background, tag_level_scene};
 use systems::ball_physics::{
     anti_stuck_ball, ball_escape, ball_follow_paddle, ball_launch, ball_speed_clamp,
     dev_spawn_balls,
@@ -45,18 +46,20 @@ use systems::level_clear::{
     on_brick_destroyed_track_clear,
 };
 use systems::level_progression::{handle_life_lost, loading_ready, prepare_level};
-use systems::level_spawner::{PendingLevel, auto_respawn_ball};
+use systems::level_spawner::{PendingLevel, auto_respawn_ball, update_brick_damage};
 use systems::lighting::{
     BiomeLighting, BlackoutState, apply_biome_lighting, on_blackout_collected, tick_blackout,
 };
-use systems::loading_screen::setup_loading_screen;
+use systems::loading_screen::{
+    finish_loading, setup_loading_screen, start_curtain, tick_reveal_zoom,
+};
 use systems::menus::{
     cleanup_play_entities, game_over_button_interaction, game_over_map_interaction,
     pause_button_interaction, pause_menu_button_interaction, setup_game_over, setup_pause,
     teardown_game_over, teardown_pause, toggle_pause,
 };
 use systems::music_control::{start_level_music, start_menu_music, stop_music_on_game_over};
-use systems::post_processing::{pulse_lens_distortion, update_post_processing};
+use systems::post_processing::{AppliedPostFx, pulse_lens_distortion, update_post_processing};
 use systems::powerup::board_effects::apply_board_effect;
 use systems::powerup::collector::{TimeSlowState, collect_powerup, tick_time_slow};
 use systems::powerup::effects::{apply_ball_effect, tick_ball_effects};
@@ -74,10 +77,11 @@ use systems::settings::{load_settings, persist_settings_on_change};
 use systems::shake::on_brick_destroyed_shake;
 use systems::special_bricks::{update_moving_bricks, update_regen_bricks};
 use systems::tweens::on_brick_hit_flash;
+use systems::ui_backdrop::{setup_ui_backdrop, tag_ui_backdrop, teardown_ui_backdrop};
 use systems::vfx::{
-    cleanup_orphaned_trails, cleanup_powerup_auras, on_brick_destroyed_particles,
-    spawn_ball_trail_for_new_balls, spawn_powerup_auras, update_ball_trail_positions,
-    update_powerup_aura_positions,
+    cleanup_orphaned_trails, cleanup_powerup_auras, on_brick_destroyed_debris,
+    on_brick_destroyed_particles, spawn_ball_trail_for_new_balls, spawn_powerup_auras, tick_debris,
+    update_ball_trail_positions, update_powerup_aura_positions,
 };
 
 fn resolve_assets_path() -> String {
@@ -115,6 +119,7 @@ fn main() {
         )
         .add_plugins(avian2d::PhysicsPlugins::default())
         .add_plugins(VfxPlugin)
+        .add_plugins(VisualsPlugin)
         .add_plugins(MetanoidAudioPlugin)
         .add_plugins(DiagnosticsPlugin)
         .add_plugins(MetanoidUiPlugin)
@@ -133,6 +138,7 @@ fn main() {
         .init_resource::<systems::level_progression::ActiveLevelDifficulty>()
         .init_resource::<LevelClearTracker>()
         .init_resource::<SpeedWhooshCooldown>()
+        .init_resource::<AppliedPostFx>()
         // Observers
         .add_observer(handle_life_lost)
         .add_observer(on_life_lost_track_stats)
@@ -148,29 +154,46 @@ fn main() {
         .add_observer(on_paddle_hit_reset_combo)
         .add_observer(on_paddle_side_hit_fx)
         .add_observer(on_brick_destroyed_particles)
+        .add_observer(on_brick_destroyed_debris)
         .add_observer(on_blackout_collected)
         .add_observer(on_brick_destroyed_shake)
         .add_observer(on_brick_hit_flash)
         .add_observer(on_floating_text_event)
         // Settings persistence
-        .add_systems(Update, persist_settings_on_change)
+        .add_systems(Update, (persist_settings_on_change, tag_ui_backdrop))
         // Menu
-        .add_systems(OnEnter(AppState::Menu), (init_game_state, start_menu_music))
-        // Loading
+        .add_systems(
+            OnEnter(AppState::Menu),
+            (init_game_state, start_menu_music, setup_ui_backdrop),
+        )
+        .add_systems(OnExit(AppState::Menu), teardown_ui_backdrop)
+        // Galaxy map backdrop
+        .add_systems(OnEnter(AppState::LevelSelect), setup_ui_backdrop)
+        .add_systems(OnExit(AppState::LevelSelect), teardown_ui_backdrop)
+        // Loading: prepare the level + recipe first, then build the curtain.
         .add_systems(
             OnEnter(AppState::Loading),
             (
-                setup_loading_screen,
                 prepare_level,
+                setup_loading_screen,
                 setup_particle_effects,
                 setup_enoki_effects,
-            ),
+            )
+                .chain(),
         )
         .add_systems(
             Update,
-            loading_ready
-                .run_if(in_state(AppState::Loading))
-                .run_if(resource_exists::<PendingLevel>),
+            (
+                loading_ready
+                    .run_if(in_state(AppState::Loading))
+                    .run_if(resource_exists::<PendingLevel>),
+                setup_background.run_if(in_state(AppState::Loading)),
+                setup_arena.run_if(in_state(AppState::Loading)),
+                setup_camera_effects.run_if(in_state(AppState::Loading)),
+                start_curtain.run_if(in_state(AppState::Loading)),
+                tick_reveal_zoom.run_if(in_state(AppState::Loading)),
+                finish_loading.run_if(in_state(AppState::Loading)),
+            ),
         )
         .add_systems(
             OnEnter(AppState::Playing),
@@ -200,7 +223,6 @@ fn main() {
                 anti_stuck_ball,
                 ball_escape,
                 ball_follow_paddle,
-                parallax_shift,
                 ball_paddle_collision,
                 ball_brick_collision,
                 ball_wall_collision,
@@ -256,6 +278,9 @@ fn main() {
                 update_powerup_aura_positions,
                 cleanup_powerup_auras,
                 auto_respawn_ball,
+                update_brick_damage,
+                tick_debris,
+                tag_level_scene,
             )
                 .run_if(in_state(AppState::Playing)),
         )

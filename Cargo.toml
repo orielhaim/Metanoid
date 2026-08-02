@@ -3,6 +3,7 @@ members = [
     "crates/metanoid_core",
     "crates/metanoid_procgen",
     "crates/metanoid_vfx",
+    "crates/metanoid_visuals",
     "crates/metanoid_audio",
     "crates/metanoid_ui",
     "crates/metanoid_game",

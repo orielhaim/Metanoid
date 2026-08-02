@@ -1,87 +1,96 @@
 use bevy::prelude::*;
-use metanoid_core::components::paddle::Paddle;
+use bevy_enoki::prelude::*;
 use metanoid_core::constants::*;
+use metanoid_core::settings::{GameSettings, ParticleQuality};
+use metanoid_visuals::SkyMaterial;
+use metanoid_visuals::ambient::{AmbientEmitter, spawn_ambient};
+use metanoid_visuals::silhouette::{SilhouettePart, spawn_silhouette_layers};
+use metanoid_visuals::sky::{SkyQuad, spawn_sky};
 
-use crate::systems::level_spawner::LevelEntity;
+use super::level_progression::ActiveLevelVisuals;
+use super::level_spawner::LevelEntity;
 
-#[derive(Component)]
-pub struct ParallaxLayer {
-    pub depth: f32,
+#[derive(Resource)]
+pub struct BackgroundSpawned;
+
+/// Tag any gameplay-scene visuals with `LevelEntity` so they're cleaned up
+/// between levels (sky, silhouettes and ambient emitters spawned without it).
+pub fn tag_level_scene(
+    mut commands: Commands,
+    sky: Query<Entity, (With<SkyQuad>, Without<LevelEntity>)>,
+    silhouettes: Query<Entity, (With<SilhouettePart>, Without<LevelEntity>)>,
+    ambient: Query<Entity, (With<AmbientEmitter>, Without<LevelEntity>)>,
+) {
+    for e in &sky {
+        commands.entity(e).insert(LevelEntity);
+    }
+    for e in &silhouettes {
+        commands.entity(e).insert(LevelEntity);
+    }
+    for e in &ambient {
+        commands.entity(e).insert(LevelEntity);
+    }
 }
 
+/// Build the full procedural backdrop for the current level's recipe:
+/// shader sky, parallax silhouettes, ground strip and ambient particles.
 pub fn setup_background(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<ColorMaterial>>,
+    mut sky_materials: ResMut<Assets<SkyMaterial>>,
+    mut enoki: ResMut<Assets<Particle2dEffect>>,
+    visuals: Option<Res<ActiveLevelVisuals>>,
+    settings: Res<GameSettings>,
+    spawned: Option<Res<BackgroundSpawned>>,
 ) {
-    let bg_color = Color::srgb(0.02, 0.02, 0.05);
-    let bg_mesh = meshes.add(Rectangle::new(ARENA_WIDTH * 2.0, ARENA_HEIGHT * 2.0));
-    let bg_mat = materials.add(bg_color);
-    commands.spawn((
-        LevelEntity,
-        ParallaxLayer { depth: 0.0 },
-        Mesh2d(bg_mesh),
-        MeshMaterial2d(bg_mat),
-        Transform::from_xyz(0.0, 0.0, -10.0),
-    ));
-
-    let shapes_mesh = meshes.add(Rectangle::new(60.0, 60.0));
-    for i in 0..12 {
-        let x = (i as f32 - 5.5) * 100.0 + 30.0;
-        let y = ((i * 37) % 400) as f32 - 200.0;
-        let opacity = 0.06 + (i as f32 % 3.0) * 0.02;
-        let mat = materials.add(Color::srgba(0.3, 0.3, 0.5, opacity));
-        commands.spawn((
-            LevelEntity,
-            ParallaxLayer { depth: 0.1 },
-            Mesh2d(shapes_mesh.clone()),
-            MeshMaterial2d(mat),
-            Transform::from_xyz(x, y, -8.0).with_rotation(Quat::from_rotation_z(i as f32 * 0.5)),
-        ));
+    if spawned.is_some() {
+        return;
     }
-
-    let particle_mesh = meshes.add(Circle::new(2.0));
-    for i in 0..30 {
-        let x = (i as f32 - 15.0) * 80.0 + (i as f32 * 17.0).sin() * 40.0;
-        let y = (i as f32 * 23.0).cos() * 250.0;
-        let opacity = 0.04 + (i as f32 % 4.0) * 0.015;
-        let mat = materials.add(Color::srgba(0.5, 0.5, 0.7, opacity));
-        commands.spawn((
-            LevelEntity,
-            ParallaxLayer { depth: 0.3 },
-            Mesh2d(particle_mesh.clone()),
-            MeshMaterial2d(mat),
-            Transform::from_xyz(x, y, -6.0),
-        ));
-    }
-
-    let star_mesh = meshes.add(Circle::new(1.0));
-    for i in 0..50 {
-        let x = (i as f32 - 25.0) * 50.0 + (i as f32 * 31.0).sin() * 60.0;
-        let y = (i as f32 * 41.0).cos() * 300.0;
-        let opacity = 0.03 + (i as f32 % 5.0) * 0.01;
-        let mat = materials.add(Color::srgba(0.7, 0.7, 0.9, opacity));
-        commands.spawn((
-            LevelEntity,
-            ParallaxLayer { depth: 0.5 },
-            Mesh2d(star_mesh.clone()),
-            MeshMaterial2d(mat),
-            Transform::from_xyz(x, y, -4.0),
-        ));
-    }
-}
-
-pub fn parallax_shift(
-    paddle: Query<&Transform, With<Paddle>>,
-    mut layers: Query<(&ParallaxLayer, &mut Transform), Without<Paddle>>,
-) {
-    let Ok(paddle_transform) = paddle.single() else {
+    let Some(visuals) = visuals else {
         return;
     };
-    let px = paddle_transform.translation.x / (ARENA_WIDTH / 2.0);
+    commands.insert_resource(BackgroundSpawned);
 
-    for (layer, mut transform) in &mut layers {
-        let shift = px * layer.depth * 30.0;
-        transform.translation.x = transform.translation.x + shift * 0.02;
-    }
+    let recipe = &visuals.recipe;
+    let reduce_motion = settings.reduce_motion;
+
+    spawn_sky(
+        &mut commands,
+        &mut meshes,
+        &mut sky_materials,
+        recipe,
+        reduce_motion,
+    );
+    spawn_silhouette_layers(&mut commands, &mut meshes, &mut materials, recipe);
+
+    // Ground strip with glow line.
+    let ground_mesh = meshes.add(Rectangle::new(ARENA_WIDTH + 240.0, 46.0));
+    commands.spawn((
+        LevelEntity,
+        Mesh2d(ground_mesh),
+        MeshMaterial2d(visuals.materials.ground.clone()),
+        Transform::from_xyz(0.0, -ARENA_HEIGHT / 2.0 + 17.0, -3.0),
+    ));
+    let glow_mesh = meshes.add(Rectangle::new(ARENA_WIDTH + 240.0, 3.0));
+    let glow_mat = materials.add(ColorMaterial::from_color(recipe.ground.glow));
+    commands.spawn((
+        LevelEntity,
+        Mesh2d(glow_mesh),
+        MeshMaterial2d(glow_mat),
+        Transform::from_xyz(0.0, -ARENA_HEIGHT / 2.0 + 41.0, -2.5),
+    ));
+
+    let particle_scale = match settings.particle_quality {
+        ParticleQuality::Low => 0.4,
+        ParticleQuality::Medium => 1.0,
+        ParticleQuality::High => 1.6,
+    };
+    spawn_ambient(
+        &mut commands,
+        &mut enoki,
+        recipe,
+        particle_scale,
+        reduce_motion,
+    );
 }

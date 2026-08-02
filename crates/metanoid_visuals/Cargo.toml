@@ -1,0 +1,13 @@
+[package]
+name = "metanoid_visuals"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+metanoid_core = { path = "../metanoid_core" }
+metanoid_procgen = { path = "../metanoid_procgen" }
+bevy = { workspace = true }
+bevy_enoki = { workspace = true }
+bevy_tweening = { workspace = true }
+rand = { workspace = true }
+rand_chacha = { workspace = true }

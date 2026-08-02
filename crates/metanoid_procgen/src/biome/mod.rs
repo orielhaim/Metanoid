@@ -1,3 +1,4 @@
+pub mod composition;
 pub mod generator;
 pub mod palette;
 pub mod parameters;

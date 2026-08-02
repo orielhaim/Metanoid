@@ -15,7 +15,7 @@ use metanoid_procgen::universe::progression::LEVELS_PER_BIOME;
 
 use crate::scroll::ScrollArea;
 use crate::theme::{UiTheme, grade_color};
-use crate::widgets::{primary_button_colors, secondary_button_colors, spawn_label};
+use crate::widgets::{primary_button_colors, secondary_button_colors, spawn_label, spawn_title};
 
 #[derive(Component)]
 pub struct GalaxyMapRoot;
@@ -36,6 +36,19 @@ pub struct LevelNodeButton {
     pub level: u64,
     pub unlocked: bool,
     pub is_boss: bool,
+}
+
+/// Pulsing scale animation for the currently selected node.
+#[derive(Component)]
+pub struct NodePulse;
+
+/// Gentle pulse on the selected node.
+pub fn tick_node_pulse(time: Res<Time>, mut q: Query<&mut UiTransform, With<NodePulse>>) {
+    let t = time.elapsed_secs();
+    for mut transform in &mut q {
+        let s = 1.0 + (t * 3.0).sin() * 0.08;
+        transform.scale = Vec2::splat(s);
+    }
 }
 
 #[derive(Component, Clone, Copy)]
@@ -194,9 +207,20 @@ pub fn setup_galaxy_map(
                 row_gap: Val::Px(10.0),
                 ..default()
             },
-            BackgroundColor(Color::srgb(0.012, 0.014, 0.04)),
+            BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.0)),
         ))
         .with_children(|root| {
+            // Dark scrim so text stays readable over the animated backdrop.
+            root.spawn(Node {
+                position_type: PositionType::Absolute,
+                left: Val::Px(0.0),
+                right: Val::Px(0.0),
+                top: Val::Px(0.0),
+                bottom: Val::Px(0.0),
+                ..default()
+            })
+            .insert(BackgroundColor(Color::srgba(0.01, 0.012, 0.05, 0.62)));
+
             // Decorative starfield (pure colored squares — no glyphs)
             root.spawn(Node {
                 position_type: PositionType::Absolute,
@@ -242,7 +266,7 @@ pub fn setup_galaxy_map(
                     ..default()
                 })
                 .with_children(|t| {
-                    spawn_label(t, "GALAXY MAP", 30.0, theme.text_primary);
+                    spawn_title(t, "GALAXY MAP", 30.0, theme.text_primary);
                     spawn_label(
                         t,
                         format!(
@@ -545,39 +569,41 @@ pub fn setup_galaxy_map(
                                     };
                                     let size = if boss { 52.0 } else { 42.0 };
 
-                                    nodes
-                                        .spawn((
-                                            LevelNodeButton {
-                                                galaxy: sel.galaxy,
-                                                biome: b as u64,
-                                                level: l,
-                                                unlocked: lvl_unlocked,
-                                                is_boss: boss,
-                                            },
-                                            Button,
-                                            Node {
-                                                width: Val::Px(size),
-                                                height: Val::Px(size),
-                                                border: UiRect::all(Val::Px(border_w)),
-                                                border_radius: BorderRadius::all(Val::Px(
-                                                    if boss { 10.0 } else { size / 2.0 },
-                                                )),
-                                                justify_content: JustifyContent::Center,
-                                                align_items: AlignItems::Center,
-                                                ..default()
-                                            },
-                                            BackgroundColor(if selected_node {
-                                                Color::srgb(0.12, 0.16, 0.28)
-                                            } else {
-                                                fill
-                                            }),
-                                            BorderColor::all(if selected_node {
-                                                theme.accent
-                                            } else {
-                                                border_c
-                                            }),
-                                        ))
-                                        .with_children(|n| {
+                                    let mut node = nodes.spawn((
+                                        LevelNodeButton {
+                                            galaxy: sel.galaxy,
+                                            biome: b as u64,
+                                            level: l,
+                                            unlocked: lvl_unlocked,
+                                            is_boss: boss,
+                                        },
+                                        Button,
+                                        Node {
+                                            width: Val::Px(size),
+                                            height: Val::Px(size),
+                                            border: UiRect::all(Val::Px(border_w)),
+                                            border_radius: BorderRadius::all(Val::Px(
+                                                if boss { 10.0 } else { size / 2.0 },
+                                            )),
+                                            justify_content: JustifyContent::Center,
+                                            align_items: AlignItems::Center,
+                                            ..default()
+                                        },
+                                        BackgroundColor(if selected_node {
+                                            Color::srgb(0.12, 0.16, 0.28)
+                                        } else {
+                                            fill
+                                        }),
+                                        BorderColor::all(if selected_node {
+                                            theme.accent
+                                        } else {
+                                            border_c
+                                        }),
+                                    ));
+                                    if selected_node {
+                                        node.insert(NodePulse);
+                                    }
+                                    node.with_children(|n| {
                                             spawn_label(n, label, if boss { 11.0 } else { 12.0 }, text_c);
                                         });
 
