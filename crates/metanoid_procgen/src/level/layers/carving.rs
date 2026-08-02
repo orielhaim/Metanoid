@@ -11,11 +11,7 @@ pub fn carve_negative_space(bricks: &mut Vec<BrickData>, cols: usize, rows: usiz
     });
 }
 
-fn simulate_ball_paths(
-    bricks: &[BrickData],
-    cols: usize,
-    rows: usize,
-) -> Vec<bool> {
+fn simulate_ball_paths(bricks: &[BrickData], cols: usize, rows: usize) -> Vec<bool> {
     let mut occupied = vec![false; cols * rows];
     for b in bricks {
         occupied[b.row * cols + b.col] = true;
@@ -101,9 +97,7 @@ mod tests {
 
     #[test]
     fn all_reachable_stay() {
-        let bricks: Vec<BrickData> = (0..5)
-            .map(|i| BrickData::normal(i, 0))
-            .collect();
+        let bricks: Vec<BrickData> = (0..5).map(|i| BrickData::normal(i, 0)).collect();
         let mut result = bricks.clone();
         carve_negative_space(&mut result, 5, 3);
         assert_eq!(result.len(), bricks.len());
@@ -111,10 +105,7 @@ mod tests {
 
     #[test]
     fn isolated_brick_removed() {
-        let mut bricks = vec![
-            BrickData::normal(0, 0),
-            BrickData::normal(4, 0),
-        ];
+        let mut bricks = vec![BrickData::normal(0, 0), BrickData::normal(4, 0)];
         let invincible = {
             let mut b = BrickData::normal(2, 0);
             b.kind = BrickKind::Invincible;

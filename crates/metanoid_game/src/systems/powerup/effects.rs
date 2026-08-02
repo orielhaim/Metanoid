@@ -1,9 +1,11 @@
-use bevy::prelude::*;
 use avian2d::prelude::*;
-use metanoid_core::components::ball::{Ball, BallEffect, BallEffectKind, Fireball, BrickThru, SplitBall};
+use bevy::prelude::*;
+use metanoid_core::components::ball::{
+    Ball, BallEffect, BallEffectKind, BrickThru, Fireball, SplitBall,
+};
 use metanoid_core::components::powerup::PowerUpKind;
 use metanoid_core::constants::*;
-use metanoid_core::events::PowerUpCollectedEvent;
+use metanoid_core::events::{BallSpeedChangeEvent, BallSplitEvent, PowerUpCollectedEvent};
 
 use crate::systems::level_spawner::LevelEntity;
 
@@ -22,6 +24,13 @@ pub fn apply_ball_effect(
 ) {
     let kind = trigger.kind;
 
+    if kind == PowerUpKind::SplitBall {
+        commands.trigger(BallSplitEvent);
+    }
+    if matches!(kind, PowerUpKind::FastBall | PowerUpKind::SlowBall) {
+        commands.trigger(BallSpeedChangeEvent);
+    }
+
     let ball_effects = match kind {
         PowerUpKind::Fireball => vec![BallEffectKind::Fireball],
         PowerUpKind::MegaBall => vec![BallEffectKind::MegaBall],
@@ -34,7 +43,9 @@ pub fn apply_ball_effect(
 
     for effect_kind in ball_effects {
         for ball_entity in &balls {
-            commands.entity(ball_entity).insert(BallEffect::new(effect_kind, EFFECT_DURATION));
+            commands
+                .entity(ball_entity)
+                .insert(BallEffect::new(effect_kind, EFFECT_DURATION));
 
             match effect_kind {
                 BallEffectKind::Fireball => {
@@ -93,6 +104,7 @@ pub fn apply_ball_effect(
                     speed: BALL_SPEED,
                     radius: BALL_RADIUS,
                     stuck: false,
+                    spin: 0.0,
                 },
                 SplitBall,
                 LevelEntity,
@@ -101,7 +113,7 @@ pub fn apply_ball_effect(
                 Transform::from_xyz(pos.x, pos.y, 0.0),
                 LinearVelocity(Vec2::new(200.0, BALL_LAUNCH_SPEED)),
                 Restitution::new(1.0),
-                CollisionLayers::DEFAULT,
+                super::super::physics_layers::layers_ball(),
                 CollisionEventsEnabled,
                 Mesh2d(split_mesh),
                 MeshMaterial2d(materials.add(Color::srgb(1.0, 1.0, 1.0))),

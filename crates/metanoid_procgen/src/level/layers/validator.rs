@@ -113,9 +113,7 @@ mod tests {
 
     #[test]
     fn removes_nothing_when_valid() {
-        let mut bricks: Vec<BrickData> = (0..5)
-            .map(|i| BrickData::normal(i, 0))
-            .collect();
+        let mut bricks: Vec<BrickData> = (0..5).map(|i| BrickData::normal(i, 0)).collect();
         let original = bricks.len();
         validate_and_fix(&mut bricks, 5, 3);
         assert_eq!(bricks.len(), original);

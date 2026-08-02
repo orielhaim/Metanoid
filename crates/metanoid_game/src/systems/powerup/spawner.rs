@@ -1,5 +1,5 @@
-use bevy::prelude::*;
 use avian2d::prelude::*;
+use bevy::prelude::*;
 use metanoid_core::components::powerup::{PowerUp, PowerUpKind};
 use metanoid_core::constants::*;
 use metanoid_core::events::BrickDestroyedEvent;
@@ -61,7 +61,7 @@ pub fn spawn_powerup_on_destroy(
         RigidBody::Kinematic,
         Collider::circle(POWERUP_RADIUS),
         Sensor,
-        CollisionLayers::DEFAULT,
+        super::super::physics_layers::layers_powerup(),
         CollisionEventsEnabled,
         Transform::from_xyz(pos.x, pos.y, 0.0),
         Mesh2d(mesh),
@@ -75,15 +75,12 @@ pub fn despawn_offscreen_powerups(
 ) {
     for (entity, transform) in &query {
         if transform.translation.y < -ARENA_HEIGHT / 2.0 - 50.0 {
-            commands.entity(entity).despawn();
+            commands.entity(entity).try_despawn();
         }
     }
 }
 
-pub fn fall_powerups(
-    time: Res<Time>,
-    mut query: Query<(&PowerUp, &mut Transform)>,
-) {
+pub fn fall_powerups(time: Res<Time>, mut query: Query<(&PowerUp, &mut Transform)>) {
     for (powerup, mut transform) in &mut query {
         transform.translation.y -= powerup.fall_speed * time.delta_secs();
     }

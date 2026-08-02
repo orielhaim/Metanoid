@@ -94,7 +94,10 @@ mod tests {
         for i in 0..50 {
             let params = BiomeGenerator::generate(master.galaxy(0).biome(i));
             let theme = BiomeTheme::generate(&params);
-            assert!(theme.bloom_intensity >= 0.2 && theme.bloom_intensity <= 1.0, "bloom {i}");
+            assert!(
+                theme.bloom_intensity >= 0.2 && theme.bloom_intensity <= 1.0,
+                "bloom {i}"
+            );
         }
     }
 

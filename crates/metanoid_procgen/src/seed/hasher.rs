@@ -22,7 +22,10 @@ mod tests {
     #[test]
     fn deterministic() {
         assert_eq!(derive(100, 0), derive(100, 0));
-        assert_eq!(derive_label(100, "structure"), derive_label(100, "structure"));
+        assert_eq!(
+            derive_label(100, "structure"),
+            derive_label(100, "structure")
+        );
     }
 
     #[test]

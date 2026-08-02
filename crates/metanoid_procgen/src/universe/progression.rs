@@ -7,7 +7,11 @@ pub struct LevelAddress {
 
 impl LevelAddress {
     pub fn new(galaxy: u64, biome: u64, level: u64) -> Self {
-        Self { galaxy, biome, level }
+        Self {
+            galaxy,
+            biome,
+            level,
+        }
     }
 
     pub fn is_boss(&self, levels_per_biome: u64) -> bool {

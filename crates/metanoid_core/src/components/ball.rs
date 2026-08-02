@@ -5,6 +5,9 @@ pub struct Ball {
     pub speed: f32,
     pub radius: f32,
     pub stuck: bool,
+    /// Spin / english in roughly -1.0..1.0 (signed sidespin).
+    /// Positive = topspin-ish / curve right when moving up.
+    pub spin: f32,
 }
 
 impl Default for Ball {
@@ -13,6 +16,7 @@ impl Default for Ball {
             speed: crate::constants::BALL_SPEED,
             radius: crate::constants::BALL_RADIUS,
             stuck: true,
+            spin: 0.0,
         }
     }
 }

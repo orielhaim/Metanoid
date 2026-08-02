@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 
-/// Safely despawn an entity — no-op if already despawned.
+/// Despawn without warning if the entity is already gone (common with multi-hit / AOE).
 pub fn safe_despawn(commands: &mut Commands, entity: Entity) {
-    commands.entity(entity).despawn();
+    commands.entity(entity).try_despawn();
 }

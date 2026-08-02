@@ -2,37 +2,58 @@ use bevy::prelude::*;
 use metanoid_core::components::brick::Brick;
 use metanoid_core::resources::game_state::GameState;
 use metanoid_core::states::AppState;
-use metanoid_procgen::biome::generator::BiomeGenerator;
-use metanoid_procgen::difficulty::boss::generate_boss_level;
-use metanoid_procgen::level::composer::compose_level;
-use metanoid_procgen::seed::hierarchy::MasterSeed;
-use metanoid_procgen::universe::galaxy::GalaxyDefinition;
-use metanoid_procgen::universe::progression::LEVELS_PER_BIOME;
+use metanoid_procgen::level::generate::generate_level_at;
 
-use super::level_spawner::{spawn_bricks, LevelEntity, PendingLevel};
+use super::level_spawner::{LevelEntity, PendingLevel, spawn_bricks};
 use super::loading_screen::LoadingScreen;
 
-pub fn prepare_level(
-    mut commands: Commands,
-    game_state: Option<Res<GameState>>,
-) {
+/// Per-level difficulty multipliers applied during play (ball speed, etc.).
+#[derive(Resource, Debug, Clone, Copy)]
+pub struct ActiveLevelDifficulty {
+    pub ball_speed_mult: f32,
+    pub level_index: u64,
+    pub is_boss: bool,
+}
+
+impl Default for ActiveLevelDifficulty {
+    fn default() -> Self {
+        Self {
+            ball_speed_mult: 1.0,
+            level_index: 0,
+            is_boss: false,
+        }
+    }
+}
+
+pub fn prepare_level(mut commands: Commands, game_state: Option<Res<GameState>>) {
     let Some(state) = game_state else {
         return;
     };
 
-    let master = MasterSeed::new(state.master_seed);
-    let galaxy_seed = master.galaxy(state.galaxy);
-    let biome_seed = galaxy_seed.biome(state.biome);
-    let biome_params = BiomeGenerator::generate(biome_seed);
+    // Unique per (master, galaxy, biome, level) — not biome-only RNG.
+    let generated = generate_level_at(state.master_seed, state.galaxy, state.biome, state.level);
 
-    let mut rng = biome_seed.rng();
-    let level = if state.is_boss(LEVELS_PER_BIOME) {
-        generate_boss_level(&biome_params, &mut rng)
-    } else {
-        compose_level(&biome_params, &mut rng)
-    };
+    info!(
+        "Generated level G{} B{} L{} (boss={}) bricks={} seed={:?} ball_mult={:.2}",
+        state.galaxy,
+        state.biome,
+        state.level,
+        generated.is_boss,
+        generated.definition.bricks.len(),
+        generated.level_seed,
+        generated.difficulty.ball_speed_mult,
+    );
 
-    commands.insert_resource(PendingLevel { level, params: biome_params });
+    commands.insert_resource(ActiveLevelDifficulty {
+        ball_speed_mult: generated.difficulty.ball_speed_mult,
+        level_index: state.level,
+        is_boss: generated.is_boss,
+    });
+
+    commands.insert_resource(PendingLevel {
+        level: generated.definition,
+        params: generated.biome_params,
+    });
 }
 
 pub fn loading_ready(
@@ -50,21 +71,25 @@ pub fn loading_ready(
         return;
     };
 
-    // Reset level clearing flag for the new level
     if let Some(ref mut state) = game_state {
         state.level_clearing = false;
     }
 
     for entity in &existing_bricks {
-        commands.entity(entity).despawn();
+        commands.entity(entity).try_despawn();
     }
     for entity in &existing_level {
-        commands.entity(entity).despawn();
+        commands.entity(entity).try_despawn();
     }
 
     let level = std::mem::replace(
         &mut pending.level,
-        metanoid_procgen::level::data::LevelDefinition { cols: 0, rows: 0, bricks: vec![] },
+        metanoid_procgen::level::data::LevelDefinition {
+            cols: 0,
+            rows: 0,
+            bricks: vec![],
+            metrics: Default::default(),
+        },
     );
     let params = pending.params;
     commands.remove_resource::<PendingLevel>();
@@ -72,81 +97,17 @@ pub fn loading_ready(
     spawn_bricks(&mut commands, &mut meshes, &mut materials, &level, &params);
 
     for entity in loading_screen.iter() {
-        commands.entity(entity).despawn();
+        commands.entity(entity).try_despawn();
     }
 
     next_state.set(AppState::Playing);
 }
 
-pub fn check_level_clear(
-    bricks: Query<&Brick>,
-    mut game_state: Option<ResMut<GameState>>,
-    mut next_state: ResMut<NextState<AppState>>,
-) {
-    let Some(ref mut state) = game_state else {
-        return;
-    };
-
-    // Debounce: don't re-check while a level clear is already in progress
-    if state.level_clearing {
-        return;
-    }
-
-    // Need at least one brick to have been spawned
-    if bricks.iter().count() == 0 {
-        return;
-    }
-
-    let destructible_remaining = bricks
-        .iter()
-        .filter(|b| {
-            matches!(
-                b.brick_type,
-                metanoid_core::components::brick::BrickType::Normal
-                    | metanoid_core::components::brick::BrickType::MultiHit
-                    | metanoid_core::components::brick::BrickType::Explosive
-                    | metanoid_core::components::brick::BrickType::Moving
-                    | metanoid_core::components::brick::BrickType::Regenerating
-            )
-        })
-        .count();
-
-    if destructible_remaining > 0 {
-        return;
-    }
-
-    // Mark as clearing to prevent re-triggering
-    state.level_clearing = true;
-
-    info!(
-        "Level cleared! Galaxy {} Biome {} Level {} — Score: {}",
-        state.galaxy, state.biome, state.level, state.score
-    );
-
-    state.level += 1;
-
-    if state.level >= LEVELS_PER_BIOME {
-        state.level = 0;
-        state.biome += 1;
-
-        if state.biome >= state.biome_count as u64 {
-            state.biome = 0;
-            state.galaxy += 1;
-            let master = MasterSeed::new(state.master_seed);
-            let galaxy_def = GalaxyDefinition::generate(master.galaxy(state.galaxy));
-            state.biome_count = galaxy_def.biome_count;
-            info!("New galaxy {} with {} biomes!", state.galaxy, galaxy_def.biome_count);
-        }
-
-        info!("New biome {}!", state.biome);
-    }
-
-    // Transition to level complete screen — entities cleaned up on exit from Playing
-    next_state.set(AppState::LevelComplete);
-}
+// Level-clear logic lives in `level_clear.rs` (robust empty-query + deferred despawn handling).
 
 pub fn handle_life_lost(
     _trigger: On<metanoid_core::events::LifeLostEvent>,
+    mut commands: Commands,
     mut game_state: Option<ResMut<GameState>>,
     mut next_state: ResMut<NextState<AppState>>,
 ) {
@@ -159,6 +120,7 @@ pub fn handle_life_lost(
 
     if state.lives <= 0 {
         info!("Game Over! Final score: {}", state.score);
+        commands.trigger(metanoid_core::events::GameOverEvent);
         next_state.set(AppState::GameOver);
     }
 }

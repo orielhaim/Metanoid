@@ -11,12 +11,12 @@ pub struct BiomeAttractor {
 }
 
 impl BiomeAttractor {
-    pub const fn new(
-        name: &'static str,
-        center: BiomeParams,
-        radius: f32,
-    ) -> Self {
-        Self { name, center, radius }
+    pub const fn new(name: &'static str, center: BiomeParams, radius: f32) -> Self {
+        Self {
+            name,
+            center,
+            radius,
+        }
     }
 }
 

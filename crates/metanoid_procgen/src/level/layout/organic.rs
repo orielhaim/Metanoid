@@ -92,12 +92,7 @@ pub fn cellular_automata(
     grid
 }
 
-pub fn dla(
-    cols: usize,
-    rows: usize,
-    params: &BiomeParams,
-    rng: &mut impl Rng,
-) -> BrickGrid {
+pub fn dla(cols: usize, rows: usize, params: &BiomeParams, rng: &mut impl Rng) -> BrickGrid {
     let mut grid = BrickGrid::new(cols, rows);
     let cx = cols / 2;
     let cy = rows / 2;

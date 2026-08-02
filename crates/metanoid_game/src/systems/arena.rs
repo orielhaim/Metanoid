@@ -1,17 +1,23 @@
-use bevy::camera::{Hdr, ScalingMode};
-use bevy::prelude::*;
-use bevy::post_process::bloom::Bloom;
-use bevy::post_process::effect_stack::{ChromaticAberration, Vignette, LensDistortion};
-use bevy_trauma_shake::prelude::*;
 use avian2d::prelude::*;
+use bevy::camera::{Hdr, ScalingMode};
+use bevy::post_process::bloom::Bloom;
+use bevy::post_process::effect_stack::{ChromaticAberration, LensDistortion, Vignette};
+use bevy::prelude::*;
+use bevy_trauma_shake::prelude::*;
 use metanoid_core::components::paddle::Paddle;
 use metanoid_core::constants::*;
+
+use super::physics_layers::{layers_paddle, layers_wall};
 
 #[derive(Component)]
 pub struct GameCamera;
 
 #[derive(Component)]
 pub struct ArenaEntity;
+
+/// Marker for arena walls (for bounce SFX / wall hit events).
+#[derive(Component)]
+pub struct Wall;
 
 #[derive(Resource)]
 pub struct ArenaSpawned;
@@ -23,35 +29,47 @@ pub fn setup_persistent_camera(mut commands: Commands) {
         Hdr,
         GameCamera,
         Projection::from(OrthographicProjection {
-            scaling_mode: ScalingMode::FixedVertical { viewport_height: ARENA_HEIGHT },
+            scaling_mode: ScalingMode::FixedVertical {
+                viewport_height: ARENA_HEIGHT,
+            },
             ..OrthographicProjection::default_2d()
         }),
     ));
 }
 
 /// Add post-processing components to the existing camera when entering gameplay.
-pub fn setup_camera_effects(
-    mut commands: Commands,
-    cameras: Query<Entity, With<GameCamera>>,
-) {
+pub fn setup_camera_effects(mut commands: Commands, cameras: Query<Entity, With<GameCamera>>) {
     for entity in &cameras {
         commands.entity(entity).insert((
             Shake::default(),
-            Bloom { intensity: 0.15, ..default() },
-            ChromaticAberration { intensity: 0.0, ..default() },
-            Vignette { intensity: 0.3, radius: 0.8, smoothness: 5.0, roundness: 1.0, ..default() },
-            LensDistortion { intensity: 0.0, ..default() },
+            Bloom {
+                intensity: 0.15,
+                ..default()
+            },
+            ChromaticAberration {
+                intensity: 0.0,
+                ..default()
+            },
+            Vignette {
+                intensity: 0.3,
+                radius: 0.8,
+                smoothness: 5.0,
+                roundness: 1.0,
+                ..default()
+            },
+            LensDistortion {
+                intensity: 0.0,
+                ..default()
+            },
         ));
     }
 }
 
 /// Remove post-processing when leaving gameplay.
-pub fn teardown_camera_effects(
-    mut commands: Commands,
-    cameras: Query<Entity, With<GameCamera>>,
-) {
+pub fn teardown_camera_effects(mut commands: Commands, cameras: Query<Entity, With<GameCamera>>) {
     for entity in &cameras {
-        commands.entity(entity)
+        commands
+            .entity(entity)
             .remove::<Shake>()
             .remove::<Bloom>()
             .remove::<ChromaticAberration>()
@@ -84,10 +102,14 @@ pub fn setup_arena(
     ] {
         commands.spawn((
             ArenaEntity,
-            RigidBody::Static, Collider::rectangle(w, h),
+            Wall,
+            RigidBody::Static,
+            Collider::rectangle(w, h),
             Transform::from_xyz(x, y, 0.0),
-            CollisionLayers::DEFAULT, CollisionEventsEnabled,
-            Mesh2d(wall_mesh.clone()), MeshMaterial2d(wall_mat.clone()),
+            layers_wall(),
+            CollisionEventsEnabled,
+            Mesh2d(wall_mesh.clone()),
+            MeshMaterial2d(wall_mat.clone()),
         ));
     }
 
@@ -95,11 +117,14 @@ pub fn setup_arena(
     let paddle_mat = materials.add(Color::srgb(0.9, 0.9, 0.95));
     commands.spawn((
         ArenaEntity,
-        Paddle::default(), RigidBody::Kinematic,
+        Paddle::default(),
+        RigidBody::Kinematic,
         Collider::rectangle(PADDLE_WIDTH, PADDLE_HEIGHT),
         Transform::from_xyz(0.0, PADDLE_Y, 0.0),
         LinearVelocity::default(),
-        CollisionLayers::DEFAULT, CollisionEventsEnabled,
-        Mesh2d(paddle_mesh), MeshMaterial2d(paddle_mat),
+        layers_paddle(),
+        CollisionEventsEnabled,
+        Mesh2d(paddle_mesh),
+        MeshMaterial2d(paddle_mat),
     ));
 }

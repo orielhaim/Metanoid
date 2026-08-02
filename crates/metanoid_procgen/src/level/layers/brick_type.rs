@@ -13,11 +13,8 @@ pub fn assign_brick_types(
     let noise_seed = rng.random::<u32>();
 
     for brick in bricks.iter_mut() {
-        let cluster_val = simple_noise_2d(
-            noise_seed,
-            brick.col as f32 * 0.3,
-            brick.row as f32 * 0.3,
-        );
+        let cluster_val =
+            simple_noise_2d(noise_seed, brick.col as f32 * 0.3, brick.row as f32 * 0.3);
 
         let roll = rng.random::<f32>();
 
@@ -35,7 +32,10 @@ pub fn assign_brick_types(
     }
 
     let total = bricks.len().max(1) as f32;
-    let invincible_count = bricks.iter().filter(|b| b.kind == BrickKind::Invincible).count();
+    let invincible_count = bricks
+        .iter()
+        .filter(|b| b.kind == BrickKind::Invincible)
+        .count();
     let invincible_ratio = invincible_count as f32 / total;
     if invincible_ratio > 0.2 {
         let excess = ((invincible_ratio - 0.2) * total) as usize;
@@ -57,10 +57,7 @@ pub fn assign_brick_types(
 fn simple_noise_2d(seed: u32, x: f32, y: f32) -> f32 {
     let ix = (x * 100.0) as i32;
     let iy = (y * 100.0) as i32;
-    let hash = hash_pair(
-        hash_pair(seed as u64, ix as u64),
-        iy as u64,
-    );
+    let hash = hash_pair(hash_pair(seed as u64, ix as u64), iy as u64);
     (hash & 0xFFFF) as f32 / 0xFFFF as f32
 }
 

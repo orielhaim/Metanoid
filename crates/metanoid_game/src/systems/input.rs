@@ -1,5 +1,5 @@
-use bevy::prelude::*;
 use avian2d::prelude::*;
+use bevy::prelude::*;
 use metanoid_core::components::paddle::Paddle;
 use metanoid_core::constants::{ARENA_WIDTH, WALL_THICKNESS};
 
@@ -22,9 +22,7 @@ pub fn paddle_input(
     velocity.0 = Vec2::new(direction * paddle.speed, 0.0);
 }
 
-pub fn clamp_paddle_position(
-    mut query: Query<(&Paddle, &mut Transform), With<Paddle>>,
-) {
+pub fn clamp_paddle_position(mut query: Query<(&Paddle, &mut Transform), With<Paddle>>) {
     let Ok((paddle, mut transform)) = query.single_mut() else {
         return;
     };

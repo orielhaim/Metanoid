@@ -67,7 +67,11 @@ impl ProceduralPalette {
             Hsl::new(dominant_hue + 120.0, sat_base * 0.85, light_base + 0.05)
         };
 
-        let accent = Hsl::new(dominant_hue + 180.0, (sat_base + 0.2).min(1.0), light_base + 0.15);
+        let accent = Hsl::new(
+            dominant_hue + 180.0,
+            (sat_base + 0.2).min(1.0),
+            light_base + 0.15,
+        );
 
         let glow = Hsl::new(
             dominant_hue + 15.0,
@@ -95,8 +99,8 @@ impl ProceduralPalette {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::seed::hierarchy::MasterSeed;
     use crate::biome::generator::BiomeGenerator;
+    use crate::seed::hierarchy::MasterSeed;
 
     #[test]
     fn palette_hues_valid() {
@@ -104,11 +108,23 @@ mod tests {
         for i in 0..50 {
             let params = BiomeGenerator::generate(master.galaxy(0).biome(i));
             let pal = ProceduralPalette::generate(&params);
-            assert!(pal.primary.h >= 0.0 && pal.primary.h < 360.0, "primary hue {i}");
-            assert!(pal.secondary.h >= 0.0 && pal.secondary.h < 360.0, "secondary hue {i}");
-            assert!(pal.accent.h >= 0.0 && pal.accent.h < 360.0, "accent hue {i}");
+            assert!(
+                pal.primary.h >= 0.0 && pal.primary.h < 360.0,
+                "primary hue {i}"
+            );
+            assert!(
+                pal.secondary.h >= 0.0 && pal.secondary.h < 360.0,
+                "secondary hue {i}"
+            );
+            assert!(
+                pal.accent.h >= 0.0 && pal.accent.h < 360.0,
+                "accent hue {i}"
+            );
             assert!(pal.glow.h >= 0.0 && pal.glow.h < 360.0, "glow hue {i}");
-            assert!(pal.background.h >= 0.0 && pal.background.h < 360.0, "bg hue {i}");
+            assert!(
+                pal.background.h >= 0.0 && pal.background.h < 360.0,
+                "bg hue {i}"
+            );
         }
     }
 

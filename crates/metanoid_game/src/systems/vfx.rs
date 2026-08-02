@@ -1,12 +1,12 @@
 use bevy::prelude::*;
-use bevy_hanabi::prelude::*;
 use bevy_enoki::prelude::*;
+use bevy_hanabi::prelude::*;
 use metanoid_core::components::ball::Ball;
 use metanoid_core::components::brick::BrickType;
 use metanoid_core::components::powerup::PowerUp;
 use metanoid_core::events::BrickDestroyedEvent;
-use metanoid_vfx::particles::ParticleEffects;
 use metanoid_vfx::enoki_effects::EnokiEffects;
+use metanoid_vfx::particles::ParticleEffects;
 
 use crate::systems::level_spawner::LevelEntity;
 
@@ -21,7 +21,9 @@ pub fn spawn_ball_trail_for_new_balls(
     balls: Query<(Entity, &Transform), With<Ball>>,
     trails: Query<&BallTrail>,
 ) {
-    let Some(effects) = particle_effects else { return };
+    let Some(effects) = particle_effects else {
+        return;
+    };
 
     for (ball_entity, transform) in &balls {
         let already_has_trail = trails.iter().any(|t| t.ball == ball_entity);
@@ -56,7 +58,7 @@ pub fn cleanup_orphaned_trails(
 ) {
     for (entity, trail) in &trails {
         if balls.get(trail.ball).is_err() {
-            commands.entity(entity).despawn();
+            commands.entity(entity).try_despawn();
         }
     }
 }
@@ -66,7 +68,9 @@ pub fn on_brick_destroyed_particles(
     mut commands: Commands,
     particle_effects: Option<Res<ParticleEffects>>,
 ) {
-    let Some(effects) = particle_effects else { return };
+    let Some(effects) = particle_effects else {
+        return;
+    };
 
     let is_explosive = trigger.brick_type == BrickType::Explosive;
     let effect_handle = if is_explosive {
@@ -125,7 +129,7 @@ pub fn cleanup_powerup_auras(
 ) {
     for (entity, aura) in &auras {
         if powerups.get(aura.powerup).is_err() {
-            commands.entity(entity).despawn();
+            commands.entity(entity).try_despawn();
         }
     }
 }

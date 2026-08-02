@@ -1,7 +1,9 @@
-use bevy::prelude::*;
 use avian2d::prelude::*;
+use bevy::prelude::*;
 use metanoid_core::components::ball::Ball;
-use metanoid_core::components::paddle::{Paddle, PaddleEffect, PaddleEffectKind, LaserPaddle, ShieldBarrier};
+use metanoid_core::components::paddle::{
+    LaserPaddle, Paddle, PaddleEffect, PaddleEffectKind, ShieldBarrier,
+};
 use metanoid_core::components::powerup::PowerUpKind;
 use metanoid_core::constants::*;
 use metanoid_core::events::{LaserFireEvent, PowerUpCollectedEvent, ShieldActivateEvent};
@@ -41,28 +43,43 @@ pub fn apply_paddle_effect(
         PowerUpKind::ExpandPaddle => {
             for paddle_entity in &paddles {
                 let new_size = Vec2::new(PADDLE_WIDTH * 1.5, PADDLE_HEIGHT);
-                commands.entity(paddle_entity)
+                commands
+                    .entity(paddle_entity)
                     .insert(PaddleEffect::new(PaddleEffectKind::Expand, EFFECT_DURATION));
                 if let Ok(mut paddle) = paddle_query.get_mut(paddle_entity) {
                     paddle.size = new_size;
                 }
-                resize_paddle_visuals(paddle_entity, new_size, &mut colliders, &mesh_handles, &mut meshes);
+                resize_paddle_visuals(
+                    paddle_entity,
+                    new_size,
+                    &mut colliders,
+                    &mesh_handles,
+                    &mut meshes,
+                );
             }
         }
         PowerUpKind::ShrinkPaddle => {
             for paddle_entity in &paddles {
                 let new_size = Vec2::new(PADDLE_WIDTH * 0.6, PADDLE_HEIGHT);
-                commands.entity(paddle_entity)
+                commands
+                    .entity(paddle_entity)
                     .insert(PaddleEffect::new(PaddleEffectKind::Shrink, EFFECT_DURATION));
                 if let Ok(mut paddle) = paddle_query.get_mut(paddle_entity) {
                     paddle.size = new_size;
                 }
-                resize_paddle_visuals(paddle_entity, new_size, &mut colliders, &mesh_handles, &mut meshes);
+                resize_paddle_visuals(
+                    paddle_entity,
+                    new_size,
+                    &mut colliders,
+                    &mesh_handles,
+                    &mut meshes,
+                );
             }
         }
         PowerUpKind::LaserPaddle => {
             for paddle_entity in &paddles {
-                commands.entity(paddle_entity)
+                commands
+                    .entity(paddle_entity)
                     .insert(PaddleEffect::new(PaddleEffectKind::Laser, EFFECT_DURATION))
                     .insert(LaserPaddle {
                         cooldown: Timer::from_seconds(0.3, TimerMode::Repeating),
@@ -71,13 +88,15 @@ pub fn apply_paddle_effect(
         }
         PowerUpKind::GrabPaddle => {
             for paddle_entity in &paddles {
-                commands.entity(paddle_entity)
+                commands
+                    .entity(paddle_entity)
                     .insert(PaddleEffect::new(PaddleEffectKind::Grab, EFFECT_DURATION));
             }
         }
         PowerUpKind::Shield => {
             for paddle_entity in &paddles {
-                commands.entity(paddle_entity)
+                commands
+                    .entity(paddle_entity)
                     .insert(PaddleEffect::new(PaddleEffectKind::Shield, EFFECT_DURATION));
             }
             let barrier_mesh = meshes.add(Rectangle::new(ARENA_WIDTH - WALL_THICKNESS * 2.0, 8.0));
@@ -88,7 +107,7 @@ pub fn apply_paddle_effect(
                 RigidBody::Static,
                 Collider::rectangle(ARENA_WIDTH - WALL_THICKNESS * 2.0, 8.0),
                 Transform::from_xyz(0.0, PADDLE_Y - 30.0, 0.0),
-                CollisionLayers::DEFAULT,
+                super::super::physics_layers::layers_shield(),
                 CollisionEventsEnabled,
                 Mesh2d(barrier_mesh),
                 MeshMaterial2d(barrier_mat),
@@ -115,14 +134,20 @@ pub fn tick_paddle_effects(
             match effect.kind {
                 PaddleEffectKind::Expand | PaddleEffectKind::Shrink => {
                     paddle.size = Vec2::new(PADDLE_WIDTH, PADDLE_HEIGHT);
-                    resize_paddle_visuals(entity, paddle.size, &mut colliders, &mesh_handles, &mut meshes);
+                    resize_paddle_visuals(
+                        entity,
+                        paddle.size,
+                        &mut colliders,
+                        &mesh_handles,
+                        &mut meshes,
+                    );
                 }
                 PaddleEffectKind::Laser => {
                     commands.entity(entity).remove::<LaserPaddle>();
                 }
                 PaddleEffectKind::Shield => {
                     for shield_entity in &shields {
-                        commands.entity(shield_entity).despawn();
+                        commands.entity(shield_entity).try_despawn();
                     }
                 }
                 _ => {}
@@ -154,7 +179,7 @@ pub fn fire_lasers(
                 RigidBody::Kinematic,
                 Collider::rectangle(4.0, 16.0),
                 Sensor,
-                CollisionLayers::DEFAULT,
+                super::super::physics_layers::layers_projectile(),
                 CollisionEventsEnabled,
                 Transform::from_xyz(pos.x - 20.0, pos.y + 20.0, 0.0),
                 LinearVelocity(Vec2::new(0.0, 600.0)),
@@ -167,7 +192,7 @@ pub fn fire_lasers(
                 RigidBody::Kinematic,
                 Collider::rectangle(4.0, 16.0),
                 Sensor,
-                CollisionLayers::DEFAULT,
+                super::super::physics_layers::layers_projectile(),
                 CollisionEventsEnabled,
                 Transform::from_xyz(pos.x + 20.0, pos.y + 20.0, 0.0),
                 LinearVelocity(Vec2::new(0.0, 600.0)),
@@ -187,7 +212,7 @@ pub fn despawn_offscreen_lasers(
 ) {
     for (entity, transform) in &query {
         if transform.translation.y > ARENA_HEIGHT / 2.0 + 50.0 {
-            commands.entity(entity).despawn();
+            commands.entity(entity).try_despawn();
         }
     }
 }
@@ -198,12 +223,14 @@ pub fn laser_hit_bricks(
     lasers: Query<&LaserProjectile>,
     mut bricks: Query<(&mut metanoid_core::components::brick::Brick, &Transform)>,
 ) {
+    use super::super::level_clear::destroy_brick;
+    use metanoid_core::components::brick::BrickType;
+
     for event in collision_reader.read() {
         let (laser_entity, brick_entity) =
             if lasers.get(event.collider1).is_ok() && bricks.get(event.collider2).is_ok() {
                 (event.collider1, event.collider2)
-            } else if lasers.get(event.collider2).is_ok() && bricks.get(event.collider1).is_ok()
-            {
+            } else if lasers.get(event.collider2).is_ok() && bricks.get(event.collider1).is_ok() {
                 (event.collider2, event.collider1)
             } else {
                 continue;
@@ -213,19 +240,23 @@ pub fn laser_hit_bricks(
             continue;
         };
 
-        let brick_pos = transform.translation.truncate();
-        let brick_type = brick.brick_type;
-
-        brick.health = brick.health.saturating_sub(1);
-        commands.entity(laser_entity).despawn();
-
         if brick.health == 0 {
-            commands.trigger(metanoid_core::events::BrickDestroyedEvent {
-                brick: brick_entity,
-                position: brick_pos,
-                brick_type,
-            });
-            commands.entity(brick_entity).despawn();
+            commands.entity(laser_entity).try_despawn();
+            continue;
+        }
+
+        let brick_pos = transform.translation.truncate();
+        commands.entity(laser_entity).try_despawn();
+
+        // Lasers do not destroy invincible bricks
+        if brick.brick_type == BrickType::Invincible {
+            continue;
+        }
+
+        if brick.health <= 1 {
+            destroy_brick(&mut commands, brick_entity, &mut brick, brick_pos);
+        } else {
+            brick.health -= 1;
         }
     }
 }
@@ -240,14 +271,13 @@ pub fn ball_shield_collision(
         let (_ball_entity, shield_entity) =
             if balls.get(event.collider1).is_ok() && shields.get(event.collider2).is_ok() {
                 (event.collider1, event.collider2)
-            } else if balls.get(event.collider2).is_ok() && shields.get(event.collider1).is_ok()
-            {
+            } else if balls.get(event.collider2).is_ok() && shields.get(event.collider1).is_ok() {
                 (event.collider2, event.collider1)
             } else {
                 continue;
             };
 
         commands.trigger(metanoid_core::events::ShieldHitEvent);
-        commands.entity(shield_entity).despawn();
+        commands.entity(shield_entity).try_despawn();
     }
 }

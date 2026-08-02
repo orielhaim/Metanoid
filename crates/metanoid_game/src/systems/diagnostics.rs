@@ -1,7 +1,7 @@
-use bevy::prelude::*;
 use bevy::diagnostic::{DiagnosticsStore, FrameTimeDiagnosticsPlugin};
+use bevy::prelude::*;
 
-use super::settings::GameSettings;
+use metanoid_core::GameSettings;
 
 #[derive(Component)]
 pub struct FpsText;

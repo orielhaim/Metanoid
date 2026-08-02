@@ -1,6 +1,6 @@
 use bevy::prelude::*;
-use bevy_tweening::*;
 use bevy_tweening::lens::TransformScaleLens;
+use bevy_tweening::*;
 use std::time::Duration;
 
 use metanoid_core::components::brick::Brick;

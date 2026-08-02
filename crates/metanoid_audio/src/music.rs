@@ -1,8 +1,8 @@
 use bevy::prelude::*;
-use bevy_kira_audio::{AudioControl, AudioTween};
 use bevy_kira_audio::prelude::AudioChannel;
+use bevy_kira_audio::{AudioControl, AudioTween};
 
-use super::{MusicChannel};
+use super::MusicChannel;
 
 #[derive(Resource)]
 pub struct MusicAssets {
@@ -75,11 +75,11 @@ pub fn play_music(
         MusicTrack::Boss => music_assets.boss.clone(),
     };
 
+    // Channel gain is set from GameSettings; instance volume 0 dB = identity.
+    // Always loop background beds.
+    let _ = volume;
     audio.stop();
-    audio
-        .play(handle)
-        .with_volume(volume)
-        .looped();
+    audio.play(handle).with_volume(0.0).looped();
 }
 
 pub fn crossfade_to(
@@ -90,7 +90,9 @@ pub fn crossfade_to(
 ) {
     let handle = match new_track {
         MusicTrack::None => {
-            audio.stop().fade_out(AudioTween::linear(std::time::Duration::from_millis(500)));
+            audio
+                .stop()
+                .fade_out(AudioTween::linear(std::time::Duration::from_millis(500)));
             return;
         }
         MusicTrack::Menu => music_assets.menu.clone(),
@@ -102,10 +104,13 @@ pub fn crossfade_to(
         MusicTrack::Boss => music_assets.boss.clone(),
     };
 
-    audio.stop().fade_out(AudioTween::linear(std::time::Duration::from_millis(500)));
+    let _ = volume;
+    audio
+        .stop()
+        .fade_out(AudioTween::linear(std::time::Duration::from_millis(500)));
     audio
         .play(handle)
-        .with_volume(volume)
+        .with_volume(0.0)
         .fade_in(AudioTween::linear(std::time::Duration::from_millis(500)))
         .looped();
 }

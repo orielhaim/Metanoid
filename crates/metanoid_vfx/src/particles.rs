@@ -1,7 +1,7 @@
 use bevy::prelude::*;
-use bevy_hanabi::prelude::*;
-use bevy_hanabi::Gradient as HanabiGradient;
 use bevy_enoki::EnokiPlugin;
+use bevy_hanabi::Gradient as HanabiGradient;
+use bevy_hanabi::prelude::*;
 use bevy_trauma_shake::prelude::TraumaPlugin;
 use bevy_tweening::TweeningPlugin;
 
@@ -23,10 +23,7 @@ pub struct ParticleEffects {
     pub explosion: Handle<EffectAsset>,
 }
 
-pub fn setup_particle_effects(
-    mut commands: Commands,
-    mut effects: ResMut<Assets<EffectAsset>>,
-) {
+pub fn setup_particle_effects(mut commands: Commands, mut effects: ResMut<Assets<EffectAsset>>) {
     let brick_break = create_brick_break_effect(&mut effects);
     let ball_trail = create_ball_trail_effect(&mut effects);
     let explosion = create_explosion_effect(&mut effects);

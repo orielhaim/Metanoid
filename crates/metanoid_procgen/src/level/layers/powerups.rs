@@ -5,11 +5,7 @@ use crate::level::data::BrickData;
 
 const PITY_THRESHOLD: usize = 8;
 
-pub fn seed_powerups(
-    bricks: &mut [BrickData],
-    params: &BiomeParams,
-    rng: &mut impl Rng,
-) {
+pub fn seed_powerups(bricks: &mut [BrickData], params: &BiomeParams, rng: &mut impl Rng) {
     let base_chance = 0.08 + params.density * 0.08;
     let mut bricks_since_drop: usize = 0;
 

@@ -36,8 +36,7 @@ pub fn setup_background(
             ParallaxLayer { depth: 0.1 },
             Mesh2d(shapes_mesh.clone()),
             MeshMaterial2d(mat),
-            Transform::from_xyz(x, y, -8.0)
-                .with_rotation(Quat::from_rotation_z(i as f32 * 0.5)),
+            Transform::from_xyz(x, y, -8.0).with_rotation(Quat::from_rotation_z(i as f32 * 0.5)),
         ));
     }
 
@@ -76,7 +75,9 @@ pub fn parallax_shift(
     paddle: Query<&Transform, With<Paddle>>,
     mut layers: Query<(&ParallaxLayer, &mut Transform), Without<Paddle>>,
 ) {
-    let Ok(paddle_transform) = paddle.single() else { return };
+    let Ok(paddle_transform) = paddle.single() else {
+        return;
+    };
     let px = paddle_transform.translation.x / (ARENA_WIDTH / 2.0);
 
     for (layer, mut transform) in &mut layers {

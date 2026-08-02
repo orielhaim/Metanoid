@@ -1,10 +1,11 @@
 use rand::prelude::*;
 
-use crate::biome::parameters::BiomeParams;
-use crate::level::grid::BrickGrid;
+use super::creative;
 use super::geometric;
 use super::hybrid;
 use super::organic;
+use crate::biome::parameters::BiomeParams;
+use crate::level::grid::BrickGrid;
 
 pub enum PatternCategory {
     Geometric,
@@ -43,10 +44,30 @@ pub fn generate_layout(
     params: &BiomeParams,
     rng: &mut impl Rng,
 ) -> BrickGrid {
+    // Signature creative layouts show up often for variety / memorability.
+    if rng.random::<f32>() < 0.28 + params.weirdness * 0.25 {
+        return generate_creative(cols, rows, params, rng);
+    }
     match select_category(params.chaos, rng) {
         PatternCategory::Geometric => generate_geometric(cols, rows, params, rng),
         PatternCategory::Hybrid => generate_hybrid(cols, rows, params, rng),
         PatternCategory::Organic => generate_organic(cols, rows, params, rng),
+    }
+}
+
+fn generate_creative(
+    cols: usize,
+    rows: usize,
+    params: &BiomeParams,
+    rng: &mut impl Rng,
+) -> BrickGrid {
+    match rng.random_range(0..6) {
+        0 => creative::diamond(cols, rows, params, rng),
+        1 => creative::chevron(cols, rows, params, rng),
+        2 => creative::castle(cols, rows, params, rng),
+        3 => creative::hourglass(cols, rows, params, rng),
+        4 => creative::spiral(cols, rows, params, rng),
+        _ => creative::checker_burst(cols, rows, params, rng),
     }
 }
 
@@ -98,10 +119,10 @@ fn generate_organic(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::biome::generator::BiomeGenerator;
+    use crate::seed::hierarchy::MasterSeed;
     use rand::SeedableRng;
     use rand_chacha::ChaCha8Rng;
-    use crate::seed::hierarchy::MasterSeed;
-    use crate::biome::generator::BiomeGenerator;
 
     #[test]
     fn generate_layout_has_bricks() {
@@ -123,7 +144,10 @@ mod tests {
 
         let mut r1 = biome_seed.rng();
         let mut r2 = biome_seed.rng();
-        assert_eq!(generate_layout(14, 8, &params, &mut r1), generate_layout(14, 8, &params, &mut r2));
+        assert_eq!(
+            generate_layout(14, 8, &params, &mut r1),
+            generate_layout(14, 8, &params, &mut r2)
+        );
     }
 
     #[test]
@@ -150,7 +174,10 @@ mod tests {
                 geometric_count += 1;
             }
         }
-        assert!(geometric_count > 50, "low chaos should prefer geometric: {geometric_count}");
+        assert!(
+            geometric_count > 50,
+            "low chaos should prefer geometric: {geometric_count}"
+        );
     }
 
     #[test]
@@ -162,6 +189,9 @@ mod tests {
                 organic_count += 1;
             }
         }
-        assert!(organic_count > 30, "high chaos should prefer organic: {organic_count}");
+        assert!(
+            organic_count > 30,
+            "high chaos should prefer organic: {organic_count}"
+        );
     }
 }

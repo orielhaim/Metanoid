@@ -1,9 +1,14 @@
-use bevy::prelude::*;
 use avian2d::prelude::*;
+use bevy::prelude::*;
 use metanoid_core::components::ball::Ball;
 use metanoid_core::components::paddle::Paddle;
-use metanoid_core::constants::{BALL_LAUNCH_SPEED, BALL_RADIUS, BALL_SPEED, PADDLE_HEIGHT, PADDLE_Y};
+use metanoid_core::constants::{
+    BALL_LAUNCH_SPEED, BALL_RADIUS, BALL_SPEED, PADDLE_HEIGHT, PADDLE_Y,
+};
 use metanoid_core::events::LifeLostEvent;
+
+use super::level_progression::ActiveLevelDifficulty;
+use super::physics_layers::layers_ball;
 
 #[derive(Component)]
 pub struct DevBall;
@@ -13,10 +18,14 @@ pub fn ball_launch(
     mut commands: Commands,
     mut balls: Query<(Entity, &mut Ball, &Transform)>,
     paddle: Query<&Transform, (With<Paddle>, Without<Ball>)>,
+    difficulty: Option<Res<ActiveLevelDifficulty>>,
 ) {
     if !keyboard.just_pressed(KeyCode::Space) {
         return;
     }
+
+    let speed_mult = difficulty.map(|d| d.ball_speed_mult).unwrap_or(1.0);
+    let launch = BALL_LAUNCH_SPEED * speed_mult;
 
     for (entity, mut ball, ball_transform) in &mut balls {
         if ball.stuck {
@@ -24,25 +33,31 @@ pub fn ball_launch(
                 continue;
             };
             let offset = ball_transform.translation.x - paddle_transform.translation.x;
-            let horizontal = offset * 2.0;
+            let horizontal = offset * 2.0 * speed_mult;
 
-            commands.entity(entity).insert(LinearVelocity(Vec2::new(
-                horizontal,
-                BALL_LAUNCH_SPEED,
-            )));
+            // Scale ball target speed with level difficulty
+            ball.speed = BALL_SPEED * speed_mult;
+
+            commands
+                .entity(entity)
+                .insert(LinearVelocity(Vec2::new(horizontal, launch)));
             ball.stuck = false;
         }
     }
 }
 
-pub fn ball_speed_clamp(mut query: Query<(&Ball, &mut LinearVelocity)>) {
+pub fn ball_speed_clamp(
+    mut query: Query<(&Ball, &mut LinearVelocity)>,
+    difficulty: Option<Res<ActiveLevelDifficulty>>,
+) {
+    let mult = difficulty.map(|d| d.ball_speed_mult).unwrap_or(1.0);
     for (ball, mut velocity) in &mut query {
         let speed = velocity.0.length();
         if speed < 1.0 {
             continue;
         }
-        // Only enforce minimum speed to prevent stalling — don't cap maximum
-        let min_speed = ball.speed * 0.5;
+        // Enforce minimum relative to level difficulty so later stages stay snappy
+        let min_speed = ball.speed.max(BALL_SPEED * mult) * 0.5;
         if speed < min_speed {
             velocity.0 = velocity.0.normalize() * min_speed;
         }
@@ -76,8 +91,9 @@ pub fn ball_escape(
 ) {
     for (entity, _ball, transform) in &query {
         if transform.translation.y < -400.0 {
-            commands.entity(entity).despawn();
-            if dev_balls.get(entity).is_err() {
+            let is_player_ball = dev_balls.get(entity).is_err();
+            commands.entity(entity).try_despawn();
+            if is_player_ball {
                 commands.trigger(LifeLostEvent);
             }
         }
@@ -88,13 +104,15 @@ pub fn ball_follow_paddle(
     balls: Query<(&Ball, &mut Transform), Without<Paddle>>,
     paddle: Query<&Transform, (With<Paddle>, Without<Ball>)>,
 ) {
-    let Ok(paddle_transform) = paddle.single() else { return };
+    let Ok(paddle_transform) = paddle.single() else {
+        return;
+    };
 
     for (ball, mut ball_transform) in balls {
         if ball.stuck {
             ball_transform.translation.x = paddle_transform.translation.x;
-            ball_transform.translation.y = paddle_transform.translation.y
-                + PADDLE_HEIGHT / 2.0 + BALL_RADIUS + 2.0;
+            ball_transform.translation.y =
+                paddle_transform.translation.y + PADDLE_HEIGHT / 2.0 + BALL_RADIUS + 2.0;
         }
     }
 }
@@ -111,7 +129,9 @@ pub fn dev_spawn_balls(
         return;
     }
 
-    let Ok(paddle_t) = paddle.single() else { return };
+    let Ok(paddle_t) = paddle.single() else {
+        return;
+    };
     let base_x = paddle_t.translation.x;
 
     for i in 0..10 {
@@ -125,6 +145,7 @@ pub fn dev_spawn_balls(
                 speed: BALL_SPEED,
                 radius: BALL_RADIUS,
                 stuck: false,
+                spin: 0.0,
             },
             super::level_spawner::LevelEntity,
             RigidBody::Dynamic,
@@ -132,7 +153,7 @@ pub fn dev_spawn_balls(
             Transform::from_xyz(base_x, PADDLE_Y + PADDLE_HEIGHT, 0.0),
             LinearVelocity(Vec2::new(vx, vy.max(200.0))),
             Restitution::new(1.0),
-            CollisionLayers::DEFAULT,
+            layers_ball(),
             CollisionEventsEnabled,
             Mesh2d(meshes.add(Circle::new(BALL_RADIUS))),
             MeshMaterial2d(materials.add(Color::srgb(1.0, 1.0, 0.8))),

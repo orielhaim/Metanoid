@@ -7,10 +7,7 @@ pub struct EnokiEffects {
     pub shield_shimmer: Handle<Particle2dEffect>,
 }
 
-pub fn setup_enoki_effects(
-    mut commands: Commands,
-    mut effects: ResMut<Assets<Particle2dEffect>>,
-) {
+pub fn setup_enoki_effects(mut commands: Commands, mut effects: ResMut<Assets<Particle2dEffect>>) {
     let powerup_aura = effects.add(Particle2dEffect {
         spawn_rate: 0.1,
         spawn_amount: 1,

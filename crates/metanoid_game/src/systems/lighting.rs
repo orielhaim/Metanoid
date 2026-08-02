@@ -36,10 +36,7 @@ pub fn apply_biome_lighting(_biome_lighting: Res<BiomeLighting>, _blackout: Res<
     // Reserved for future 2D lighting integration
 }
 
-pub fn tick_blackout(
-    time: Res<Time>,
-    mut blackout: ResMut<BlackoutState>,
-) {
+pub fn tick_blackout(time: Res<Time>, mut blackout: ResMut<BlackoutState>) {
     if blackout.active {
         blackout.timer.tick(time.delta());
         if blackout.timer.is_finished() {

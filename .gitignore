@@ -1,2 +1,4 @@
 /target
 *.DS_Store
+metanoid_save.json
+metanoid_settings.json

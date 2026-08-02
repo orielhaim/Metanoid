@@ -28,6 +28,26 @@ pub struct BrickDestroyedEvent {
 pub struct PowerUpCollectedEvent {
     pub powerup: Entity,
     pub kind: crate::components::powerup::PowerUpKind,
+    /// World-space position for floating UI (paddle / collect point).
+    pub position: Vec2,
+}
+
+/// Request a floating popup (combo, power-up name, score, etc.).
+#[derive(Event, Clone)]
+pub struct FloatingTextEvent {
+    pub text: String,
+    pub position: Vec2,
+    pub color: Color,
+    pub kind: FloatingTextKind,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum FloatingTextKind {
+    #[default]
+    Combo,
+    PowerUp,
+    Score,
+    Milestone,
 }
 
 #[derive(Event)]

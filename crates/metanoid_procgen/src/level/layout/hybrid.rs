@@ -117,7 +117,16 @@ pub fn fractal_subdivision(
             subdivide(grid, x, y, hw, hh, depth - 1, remove_prob, rng);
             subdivide(grid, x + hw, y, w - hw, hh, depth - 1, remove_prob, rng);
             subdivide(grid, x, y + hh, hw, h - hh, depth - 1, remove_prob, rng);
-            subdivide(grid, x + hw, y + hh, w - hw, h - hh, depth - 1, remove_prob, rng);
+            subdivide(
+                grid,
+                x + hw,
+                y + hh,
+                w - hw,
+                h - hh,
+                depth - 1,
+                remove_prob,
+                rng,
+            );
         }
     }
 
@@ -217,6 +226,9 @@ mod tests {
         let p = test_params();
         let mut r1 = ChaCha8Rng::seed_from_u64(77);
         let mut r2 = ChaCha8Rng::seed_from_u64(77);
-        assert_eq!(wave_function(14, 8, &p, &mut r1), wave_function(14, 8, &p, &mut r2));
+        assert_eq!(
+            wave_function(14, 8, &p, &mut r1),
+            wave_function(14, 8, &p, &mut r2)
+        );
     }
 }

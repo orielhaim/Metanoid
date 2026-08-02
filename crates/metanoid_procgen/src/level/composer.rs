@@ -1,16 +1,13 @@
 use rand::prelude::*;
 
 use crate::biome::parameters::BiomeParams;
-use crate::level::data::{BrickData, LevelDefinition};
+use crate::level::data::{BrickData, BrickMetrics, LevelDefinition};
 use crate::level::layers::{base, brick_type, carving, health, powerups, specials, validator};
 
 const DEFAULT_COLS: usize = 14;
 const DEFAULT_ROWS: usize = 8;
 
-pub fn compose_level(
-    params: &BiomeParams,
-    rng: &mut impl Rng,
-) -> LevelDefinition {
+pub fn compose_level(params: &BiomeParams, rng: &mut impl Rng) -> LevelDefinition {
     compose_level_sized(DEFAULT_COLS, DEFAULT_ROWS, params, rng)
 }
 
@@ -51,10 +48,49 @@ pub fn compose_level_sized(
     // Layer 7: Validation & fix
     validator::validate_and_fix(&mut bricks, cols, rows);
 
+    // Layer 8: Never ship an empty/unplayable board
+    ensure_playable(&mut bricks, cols, rows, rng);
+
     LevelDefinition {
         cols,
         rows,
         bricks,
+        metrics: BrickMetrics {
+            cols,
+            rows,
+            ..BrickMetrics::default()
+        },
+    }
+}
+
+fn ensure_playable(bricks: &mut Vec<BrickData>, cols: usize, rows: usize, rng: &mut impl Rng) {
+    let destructible = bricks.iter().filter(|b| b.is_destructible()).count();
+    if destructible >= 3 {
+        return;
+    }
+    // Seed a playable wedge of normal bricks near the top-center
+    let target = 8.max(cols / 2);
+    let mut added = 0;
+    let mut attempts = 0;
+    while added < target && attempts < cols * rows * 2 {
+        attempts += 1;
+        let c = rng.random_range(0..cols);
+        let r = rng.random_range(0..rows.max(1).min(4).max(1));
+        if bricks.iter().any(|b| b.col == c && b.row == r) {
+            continue;
+        }
+        bricks.push(BrickData::normal(c, r));
+        added += 1;
+    }
+    // Convert any remaining invincible-only leftovers
+    if bricks.iter().filter(|b| b.is_destructible()).count() < 3 {
+        for b in bricks.iter_mut() {
+            if !b.is_destructible() {
+                b.kind = crate::level::data::BrickKind::Normal;
+                b.health = 1;
+                b.max_health = 1;
+            }
+        }
     }
 }
 
@@ -72,7 +108,10 @@ mod tests {
         let mut rng = biome_seed.rng();
         let level = compose_level(&params, &mut rng);
         assert!(!level.bricks.is_empty(), "level should have bricks");
-        assert!(level.destructible_count() > 0, "level should have destructible bricks");
+        assert!(
+            level.destructible_count() > 0,
+            "level should have destructible bricks"
+        );
     }
 
     #[test]
@@ -121,20 +160,27 @@ mod tests {
         let mut rng = biome_seed.rng();
         let level = compose_level(&params, &mut rng);
 
-        let top_hp: f32 = level.bricks.iter()
+        let top_hp: f32 = level
+            .bricks
+            .iter()
             .filter(|b| b.row == 0 && b.is_destructible())
             .map(|b| b.health as f32)
             .sum::<f32>()
             / level.bricks.iter().filter(|b| b.row == 0).count().max(1) as f32;
 
-        let bot_hp: f32 = level.bricks.iter()
+        let bot_hp: f32 = level
+            .bricks
+            .iter()
             .filter(|b| b.row == 7 && b.is_destructible())
             .map(|b| b.health as f32)
             .sum::<f32>()
             / level.bricks.iter().filter(|b| b.row == 7).count().max(1) as f32;
 
         if top_hp > 0.0 && bot_hp > 0.0 {
-            assert!(top_hp >= bot_hp, "top rows should have >= health: top={top_hp}, bot={bot_hp}");
+            assert!(
+                top_hp >= bot_hp,
+                "top rows should have >= health: top={top_hp}, bot={bot_hp}"
+            );
         }
     }
 
@@ -145,7 +191,11 @@ mod tests {
         let params = BiomeGenerator::generate(biome_seed);
         let mut rng = biome_seed.rng();
         let level = compose_level(&params, &mut rng);
-        let powerup_count = level.bricks.iter().filter(|b| b.powerup_chance > 0.0).count();
+        let powerup_count = level
+            .bricks
+            .iter()
+            .filter(|b| b.powerup_chance > 0.0)
+            .count();
         assert!(powerup_count > 0, "should have at least one power-up brick");
     }
 }

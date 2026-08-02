@@ -1,23 +1,28 @@
-use bevy::prelude::*;
 use bevy::post_process::bloom::Bloom;
-use bevy::post_process::effect_stack::{ChromaticAberration, Vignette, LensDistortion};
+use bevy::post_process::effect_stack::{ChromaticAberration, LensDistortion, Vignette};
+use bevy::prelude::*;
 use metanoid_core::components::brick::Brick;
 use metanoid_core::resources::combo::ComboCounter;
+use metanoid_core::settings::GameSettings;
 
 use super::arena::GameCamera;
 
 pub fn update_post_processing(
     combo: Res<ComboCounter>,
     bricks: Query<&Brick>,
+    settings: Res<GameSettings>,
     mut cameras: Query<(&mut Bloom, &mut ChromaticAberration, &mut Vignette), With<GameCamera>>,
 ) {
     let Ok((mut bloom, mut chromatic, mut vignette)) = cameras.single_mut() else {
         return;
     };
 
-    bloom.intensity = 0.15 + combo.multiplier * 0.05;
+    let base = 0.15 + combo.multiplier * 0.05;
+    bloom.intensity = base * settings.bloom_scale();
 
-    if combo.count >= 10 {
+    if settings.reduce_motion {
+        chromatic.intensity = 0.0;
+    } else if combo.count >= 10 {
         chromatic.intensity = 0.005 + (combo.count as f32 - 10.0) * 0.001;
     } else {
         chromatic.intensity *= 0.9;
@@ -25,9 +30,11 @@ pub fn update_post_processing(
 
     let total = bricks.iter().count();
     if total > 0 {
-        let remaining_ratio = bricks.iter().filter(|b| {
-            b.brick_type != metanoid_core::components::brick::BrickType::Invincible
-        }).count() as f32 / total.max(1) as f32;
+        let remaining_ratio = bricks
+            .iter()
+            .filter(|b| b.brick_type != metanoid_core::components::brick::BrickType::Invincible)
+            .count() as f32
+            / total.max(1) as f32;
 
         if remaining_ratio < 0.3 {
             vignette.intensity = 0.3 + (1.0 - remaining_ratio / 0.3) * 0.4;
