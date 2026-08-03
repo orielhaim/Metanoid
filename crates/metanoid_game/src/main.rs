@@ -10,7 +10,6 @@ use metanoid_procgen::seed::hierarchy::MasterSeed;
 use metanoid_procgen::universe::galaxy::GalaxyDefinition;
 use metanoid_ui::MetanoidUiPlugin;
 use metanoid_vfx::VfxPlugin;
-use metanoid_vfx::enoki_effects::setup_enoki_effects;
 use metanoid_vfx::particles::setup_particle_effects;
 use metanoid_visuals::VisualsPlugin;
 
@@ -26,9 +25,11 @@ use systems::ball_physics::{
     dev_spawn_balls,
 };
 use systems::ball_speed_fx::{
-    SpeedWhooshCooldown, on_paddle_side_hit_fx, speed_overdrive_whoosh, update_ball_speed_visuals,
-    update_speed_heat_marks,
+    SpeedWhooshCooldown, cleanup_orphaned_aeros, on_paddle_side_hit_fx, spawn_ball_aero,
+    speed_overdrive_whoosh, update_ball_aero,
 };
+use systems::brick_damage::{on_brick_hit_damage, on_brick_regen_clear};
+use systems::brick_motion::tick_brick_motion;
 use systems::collision::brick::ball_brick_collision;
 use systems::collision::paddle::{
     apply_ball_spin_physics, ball_paddle_collision, damp_spin_on_brick_hit,
@@ -46,7 +47,7 @@ use systems::level_clear::{
     on_brick_destroyed_track_clear,
 };
 use systems::level_progression::{handle_life_lost, loading_ready, prepare_level};
-use systems::level_spawner::{PendingLevel, auto_respawn_ball, update_brick_damage};
+use systems::level_spawner::{PendingLevel, auto_respawn_ball};
 use systems::lighting::{
     BiomeLighting, BlackoutState, apply_biome_lighting, on_blackout_collected, tick_blackout,
 };
@@ -69,19 +70,19 @@ use systems::powerup::paddle_effects::{
 };
 use systems::powerup::spawner::{
     PowerUpState, despawn_offscreen_powerups, fall_powerups, spawn_powerup_on_destroy,
+    tick_powerup_glow,
 };
 use systems::reset::reset_game_effects;
 use systems::run_stats::{begin_run_stats_on_play, on_life_lost_track_stats, tick_run_stats};
 use systems::save::load_save;
 use systems::settings::{load_settings, persist_settings_on_change};
 use systems::shake::on_brick_destroyed_shake;
-use systems::special_bricks::{update_moving_bricks, update_regen_bricks};
+use systems::special_bricks::update_regen_bricks;
 use systems::tweens::on_brick_hit_flash;
 use systems::ui_backdrop::{setup_ui_backdrop, tag_ui_backdrop, teardown_ui_backdrop};
 use systems::vfx::{
-    cleanup_orphaned_trails, cleanup_powerup_auras, on_brick_destroyed_debris,
-    on_brick_destroyed_particles, spawn_ball_trail_for_new_balls, spawn_powerup_auras, tick_debris,
-    update_ball_trail_positions, update_powerup_aura_positions,
+    cleanup_orphaned_trails, on_brick_destroyed_debris, on_brick_destroyed_particles,
+    spawn_ball_trail_for_new_balls, tick_debris, update_ball_trail_positions,
 };
 
 fn resolve_assets_path() -> String {
@@ -151,6 +152,8 @@ fn main() {
         .add_observer(apply_board_effect)
         .add_observer(on_brick_hit_combo)
         .add_observer(on_brick_destroyed_score)
+        .add_observer(on_brick_hit_damage)
+        .add_observer(on_brick_regen_clear)
         .add_observer(on_paddle_hit_reset_combo)
         .add_observer(on_paddle_side_hit_fx)
         .add_observer(on_brick_destroyed_particles)
@@ -173,13 +176,7 @@ fn main() {
         // Loading: prepare the level + recipe first, then build the curtain.
         .add_systems(
             OnEnter(AppState::Loading),
-            (
-                prepare_level,
-                setup_loading_screen,
-                setup_particle_effects,
-                setup_enoki_effects,
-            )
-                .chain(),
+            (prepare_level, setup_loading_screen, setup_particle_effects).chain(),
         )
         .add_systems(
             Update,
@@ -237,8 +234,10 @@ fn main() {
         .add_systems(
             Update,
             (
-                update_ball_speed_visuals,
-                update_speed_heat_marks,
+                spawn_ball_aero,
+                update_ball_aero,
+                cleanup_orphaned_aeros,
+                tick_powerup_glow,
                 speed_overdrive_whoosh,
                 dev_spawn_balls,
                 update_floating_text,
@@ -254,7 +253,7 @@ fn main() {
                 tick_blackout,
                 update_combo,
                 tick_run_stats,
-                update_moving_bricks,
+                tick_brick_motion,
                 update_regen_bricks,
                 update_post_processing,
                 pulse_lens_distortion,
@@ -274,11 +273,7 @@ fn main() {
                 spawn_ball_trail_for_new_balls,
                 update_ball_trail_positions,
                 cleanup_orphaned_trails,
-                spawn_powerup_auras,
-                update_powerup_aura_positions,
-                cleanup_powerup_auras,
                 auto_respawn_ball,
-                update_brick_damage,
                 tick_debris,
                 tag_level_scene,
             )

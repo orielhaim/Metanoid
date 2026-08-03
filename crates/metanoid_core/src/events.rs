@@ -15,6 +15,8 @@ pub struct LifeLostEvent;
 pub struct BrickHitEvent {
     pub brick: Entity,
     pub ball_speed: f32,
+    pub position: Vec2,
+    pub severity: f32,
 }
 
 #[derive(Event)]
@@ -94,4 +96,6 @@ pub struct LightningEvent;
 pub struct TeleportEvent;
 
 #[derive(Event)]
-pub struct BrickRegenEvent;
+pub struct BrickRegenEvent {
+    pub brick: Entity,
+}

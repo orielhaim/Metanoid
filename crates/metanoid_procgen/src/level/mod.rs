@@ -5,5 +5,6 @@ pub mod grid;
 pub mod layers;
 pub mod layout;
 pub mod metrics;
+pub mod motion;
 
 pub use generate::{GeneratedLevel, free_run_cells, generate_level_at, horizontal_clearance};

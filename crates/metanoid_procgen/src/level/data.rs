@@ -25,6 +25,7 @@ pub struct BrickData {
     pub max_health: u32,
     pub special: SpecialType,
     pub powerup_chance: f32,
+    pub motion: Option<crate::level::motion::BrickMotion>,
 }
 
 impl BrickData {
@@ -37,6 +38,7 @@ impl BrickData {
             max_health: 1,
             special: SpecialType::None,
             powerup_chance: 0.0,
+            motion: None,
         }
     }
 

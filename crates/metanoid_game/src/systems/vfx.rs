@@ -1,11 +1,8 @@
 use bevy::prelude::*;
-use bevy_enoki::prelude::*;
 use bevy_hanabi::prelude::*;
 use metanoid_core::components::ball::Ball;
 use metanoid_core::components::brick::BrickType;
-use metanoid_core::components::powerup::PowerUp;
 use metanoid_core::events::BrickDestroyedEvent;
-use metanoid_vfx::enoki_effects::EnokiEffects;
 use metanoid_vfx::particles::ParticleEffects;
 
 use super::level_progression::ActiveLevelVisuals;
@@ -160,55 +157,4 @@ pub fn on_brick_destroyed_particles(
         Transform::from_xyz(pos.x, pos.y, 1.0),
         LevelEntity,
     ));
-}
-
-pub fn spawn_powerup_auras(
-    mut commands: Commands,
-    enoki_effects: Option<Res<EnokiEffects>>,
-    powerups: Query<(Entity, &Transform), (With<PowerUp>, Without<PowerUpAura>)>,
-) {
-    let Some(effects) = enoki_effects else { return };
-
-    for (entity, transform) in &powerups {
-        commands.spawn((
-            ParticleSpawner::<ColorParticle2dMaterial>::default(),
-            ParticleEffectHandle(effects.powerup_aura.clone()),
-            Transform::from_translation(transform.translation).with_translation(Vec3::new(
-                transform.translation.x,
-                transform.translation.y,
-                0.5,
-            )),
-            PowerUpAura { powerup: entity },
-            LevelEntity,
-        ));
-    }
-}
-
-#[derive(Component)]
-pub struct PowerUpAura {
-    pub powerup: Entity,
-}
-
-pub fn update_powerup_aura_positions(
-    powerups: Query<&Transform, With<PowerUp>>,
-    mut auras: Query<(&PowerUpAura, &mut Transform), Without<PowerUp>>,
-) {
-    for (aura, mut aura_transform) in &mut auras {
-        if let Ok(powerup_transform) = powerups.get(aura.powerup) {
-            aura_transform.translation = powerup_transform.translation;
-            aura_transform.translation.z = 0.5;
-        }
-    }
-}
-
-pub fn cleanup_powerup_auras(
-    mut commands: Commands,
-    auras: Query<(Entity, &PowerUpAura)>,
-    powerups: Query<&PowerUp>,
-) {
-    for (entity, aura) in &auras {
-        if powerups.get(aura.powerup).is_err() {
-            commands.entity(entity).try_despawn();
-        }
-    }
 }

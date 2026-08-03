@@ -5,6 +5,7 @@ use metanoid_core::constants::*;
 use metanoid_core::events::BrickDestroyedEvent;
 use rand::prelude::*;
 
+use crate::systems::level_progression::ActiveLevelVisuals;
 use crate::systems::level_spawner::LevelEntity;
 
 #[derive(Resource)]
@@ -23,12 +24,44 @@ impl Default for PowerUpState {
 const PITY_THRESHOLD: usize = 10;
 const BASE_DROP_CHANCE: f32 = 0.12;
 
+/// Noble glow aura on a powerup: a soft halo + a thin ring that gently breathes.
+#[derive(Component)]
+pub struct PowerUpGlow {
+    pub phase: f32,
+    pub base: Srgba,
+    pub base_size: Vec2,
+    /// Rotate the sprite (used for the ring).
+    pub rotate: bool,
+}
+
+/// Gentle breathing for powerup halos + rings.
+pub fn tick_powerup_glow(
+    time: Res<Time>,
+    mut q: Query<(&PowerUpGlow, &mut Sprite, &mut Transform)>,
+) {
+    let t = time.elapsed_secs();
+    for (glow, mut sprite, mut transform) in &mut q {
+        let breathe = 0.5 + 0.5 * (t * 2.6 + glow.phase).sin();
+        sprite.color = Color::srgba(
+            glow.base.red,
+            glow.base.green,
+            glow.base.blue,
+            (glow.base.alpha * (0.55 + 0.45 * breathe)).clamp(0.0, 1.0),
+        );
+        sprite.custom_size = Some(glow.base_size * (1.0 + 0.14 * breathe));
+        if glow.rotate {
+            transform.rotate_z(t * 1.2 + glow.phase);
+        }
+    }
+}
+
 pub fn spawn_powerup_on_destroy(
     trigger: On<BrickDestroyedEvent>,
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<ColorMaterial>>,
     mut powerup_state: ResMut<PowerUpState>,
+    visuals: Option<Res<ActiveLevelVisuals>>,
 ) {
     powerup_state.bricks_since_drop += 1;
 
@@ -48,11 +81,8 @@ pub fn spawn_powerup_on_destroy(
     powerup_state.bricks_since_drop = 0;
 
     let kind = random_powerup_kind(&mut rng);
-    let color = powerup_color(kind);
-    let mesh = meshes.add(Circle::new(POWERUP_RADIUS));
-    let material = materials.add(color);
 
-    commands.spawn((
+    let mut entity = commands.spawn((
         PowerUp {
             kind,
             fall_speed: POWERUP_FALL_SPEED,
@@ -64,9 +94,62 @@ pub fn spawn_powerup_on_destroy(
         super::super::physics_layers::layers_powerup(),
         CollisionEventsEnabled,
         Transform::from_xyz(pos.x, pos.y, 0.0),
-        Mesh2d(mesh),
-        MeshMaterial2d(material),
     ));
+
+    if let Some(v) = visuals.as_ref() {
+        // Distinctive procedural texture per kind + a noble glow halo + ring.
+        let accent = powerup_color(kind);
+        let accent_srgba = Srgba::from(accent);
+        let texture = v.materials.powerup_texture(kind);
+        let glow_tex = v.materials.glow.clone();
+        let ring_tex = v.materials.ring.clone();
+
+        entity.insert((Sprite {
+            image: texture,
+            color: Color::WHITE,
+            custom_size: Some(Vec2::splat(POWERUP_RADIUS * 2.0)),
+            ..default()
+        },));
+
+        entity.with_children(|parent| {
+            parent.spawn((
+                PowerUpGlow {
+                    phase: rng.random::<f32>() * 6.2832,
+                    base: Srgba::new(accent_srgba.red, accent_srgba.green, accent_srgba.blue, 0.5),
+                    base_size: Vec2::splat(POWERUP_RADIUS * 3.4),
+                    rotate: false,
+                },
+                Sprite {
+                    image: glow_tex,
+                    color: Color::NONE,
+                    custom_size: Some(Vec2::splat(POWERUP_RADIUS * 3.4)),
+                    ..default()
+                },
+                Transform::from_xyz(0.0, 0.0, -0.1),
+            ));
+            parent.spawn((
+                PowerUpGlow {
+                    phase: rng.random::<f32>() * 6.2832,
+                    base: Srgba::new(accent_srgba.red, accent_srgba.green, accent_srgba.blue, 0.7),
+                    base_size: Vec2::splat(POWERUP_RADIUS * 3.0),
+                    rotate: true,
+                },
+                Sprite {
+                    image: ring_tex,
+                    color: Color::NONE,
+                    custom_size: Some(Vec2::splat(POWERUP_RADIUS * 3.0)),
+                    ..default()
+                },
+                Transform::from_xyz(0.0, 0.0, 0.1),
+            ));
+        });
+    } else {
+        // Fallback: plain colored disc.
+        let color = powerup_color(kind);
+        let mesh = meshes.add(Circle::new(POWERUP_RADIUS));
+        let material = materials.add(color);
+        entity.insert((Mesh2d(mesh), MeshMaterial2d(material)));
+    }
 }
 
 pub fn despawn_offscreen_powerups(

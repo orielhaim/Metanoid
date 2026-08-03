@@ -2,6 +2,8 @@ pub mod arena;
 pub mod background;
 pub mod ball_physics;
 pub mod ball_speed_fx;
+pub mod brick_damage;
+pub mod brick_motion;
 pub mod collision;
 pub mod combo;
 pub mod diagnostics;

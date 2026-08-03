@@ -6,37 +6,20 @@ use metanoid_core::components::paddle::Paddle;
 use metanoid_core::constants::*;
 use metanoid_procgen::level::data::{BrickKind, LevelDefinition, SpecialType};
 use metanoid_procgen::level::generate::free_run_cells;
-use metanoid_visuals::material::{BrickMatKind, ProceduralMaterials};
+use metanoid_visuals::material::ProceduralMaterials;
+use metanoid_visuals::recipe::TextureKind;
 
+use super::brick_damage::{BrickDamage, damage_kind_for, is_molten};
+use super::brick_motion::BrickMover;
 use super::level_progression::ActiveLevelVisuals;
 use super::physics_layers::{layers_ball, layers_brick, layers_moving_brick};
 
 #[derive(Component)]
 pub struct LevelEntity;
 
-#[derive(Component)]
-pub struct BrickVisual {
-    pub kind: BrickMatKind,
-    pub max_health: u32,
-    pub bucket: u8,
-}
-
 #[derive(Resource)]
 pub struct PendingLevel {
     pub level: LevelDefinition,
-}
-
-fn visual_kind(game_brick_type: BrickType) -> BrickMatKind {
-    match game_brick_type {
-        BrickType::MultiHit => BrickMatKind::MultiHit,
-        BrickType::Invincible => BrickMatKind::Invincible,
-        BrickType::Explosive => BrickMatKind::Explosive,
-        _ => BrickMatKind::Normal,
-    }
-}
-
-fn damage_bucket(health_pct: f32) -> u8 {
-    (health_pct.clamp(0.0, 1.0) * 3.0).round() as u8
 }
 
 pub fn spawn_bricks(
@@ -52,6 +35,7 @@ pub fn spawn_bricks(
     let cell = bw + gap;
 
     let brick_mesh = meshes.add(Rectangle::new(bw, bh));
+    let arena_half = (ARENA_WIDTH - WALL_THICKNESS) / 2.0;
 
     let start_x = -(level.cols as f32 * cell) / 2.0 + cell / 2.0;
     // Pin the grid to the TOP of the arena (row 0 = uppermost).
@@ -82,10 +66,11 @@ pub fn spawn_bricks(
         };
 
         let health_pct = data.health as f32 / data.max_health.max(1) as f32;
-        let material = visuals.brick(visual_kind(game_brick_type), health_pct);
+        let kind = damage_kind_for(game_brick_type);
+        let material = visuals.brick(kind, health_pct);
 
+        // Horizontal runway (world px) from the free cells either side.
         let (free_left, free_right) = free_run_cells(&level.bricks, data.col, data.row);
-        // Travel at most into free empty cells, minus a safety margin so AABBs never touch.
         let margin = 3.0;
         let max_left = if free_left > 0 {
             free_left as f32 * cell - margin
@@ -98,30 +83,19 @@ pub fn spawn_bricks(
             0.0
         };
 
-        let is_moving = data.special == SpecialType::Moving && (max_left > 1.0 || max_right > 1.0);
-        let (move_min_x, move_max_x, move_range, move_speed) = if is_moving {
-            let min_x = x - max_left;
-            let max_x = x + max_right;
-            // Symmetric amplitude used for sine; clamped to asymmetric bounds each frame
-            let range = max_left.min(max_right).max(max_left.max(max_right) * 0.5);
-            (
-                min_x,
-                max_x,
-                range.max(0.0),
-                0.55 + (data.col as f32 * 0.07) + (data.row as f32 * 0.04),
-            )
-        } else {
-            if data.special == SpecialType::Moving {
-                // Demote visually-blocked movers
-                game_brick_type = match data.kind {
-                    BrickKind::Normal => BrickType::Normal,
-                    BrickKind::MultiHit => BrickType::MultiHit,
-                    BrickKind::Invincible => BrickType::Invincible,
-                    BrickKind::Explosive => BrickType::Explosive,
-                };
-            }
-            (x, x, 0.0, 0.0)
-        };
+        let is_moving = data.special == SpecialType::Moving
+            && data.motion.is_some()
+            && (max_left > 1.0 || max_right > 1.0);
+
+        if data.special == SpecialType::Moving && !is_moving {
+            // Demote visually-blocked movers that lost their motion spec.
+            game_brick_type = match data.kind {
+                BrickKind::Normal => BrickType::Normal,
+                BrickKind::MultiHit => BrickType::MultiHit,
+                BrickKind::Invincible => BrickType::Invincible,
+                BrickKind::Explosive => BrickType::Explosive,
+            };
+        }
 
         let layers = if game_brick_type == BrickType::Moving {
             layers_moving_brick()
@@ -129,28 +103,60 @@ pub fn spawn_bricks(
             layers_brick()
         };
 
-        commands.spawn((
+        // Damage state (base texture for dynamic cracks).
+        let spec = visuals.brick_spec(kind);
+        let damage = BrickDamage {
+            cracks: Vec::new(),
+            base_image: visuals.base_image(kind),
+            glow: spec.map(|s| s.glow).unwrap_or(LinearRgba::WHITE),
+            molten: is_molten(kind, spec.map(|s| s.texture).unwrap_or(TextureKind::Stone)),
+        };
+
+        // Build the mover for moving bricks.
+        let mover = if is_moving {
+            let motion = data.motion.expect("mover has motion spec");
+            let half_w = bw * 0.5;
+            let half_h = bh * 0.5;
+
+            // Lane = runway clamped to the arena walls.
+            let lane_left = (x - max_left).max(-arena_half + half_w + 2.0);
+            let lane_right = (x + max_right).min(arena_half - half_w - 2.0);
+            let amp_x = ((lane_right - lane_left) * 0.5).max(2.0);
+            let lane_center_x = (lane_left + lane_right) * 0.5;
+
+            // Vertical amplitude bounded by the grid free space and arena top.
+            let amp_y = (motion.amp_y_cells * cell * 0.9)
+                .min((arena_half - 6.0 - y.abs()).max(0.0))
+                .max(0.0);
+
+            Some(BrickMover {
+                motion,
+                origin: Vec2::new(x, y),
+                lane_center_x,
+                amp_x,
+                amp_y,
+                half_w,
+                half_h,
+                u: motion.phase,
+            })
+        } else {
+            None
+        };
+
+        let mut spawn = commands.spawn((
             Brick {
                 brick_type: game_brick_type,
                 health: data.health,
                 max_health: data.max_health,
-                move_origin_x: x,
-                move_range,
-                move_speed,
+                brick_half_w: bw * 0.5,
+                brick_half_h: bh * 0.5,
                 regen_timer: if game_brick_type == BrickType::Regenerating {
                     3.2
                 } else {
                     4.0
                 },
-                move_min_x,
-                move_max_x,
-                brick_half_w: bw * 0.5,
             },
-            BrickVisual {
-                kind: visual_kind(game_brick_type),
-                max_health: data.max_health,
-                bucket: damage_bucket(health_pct),
-            },
+            damage,
             LevelEntity,
             RigidBody::Kinematic,
             Collider::rectangle(bw, bh),
@@ -160,27 +166,14 @@ pub fn spawn_bricks(
             Mesh2d(brick_mesh.clone()),
             MeshMaterial2d(material),
         ));
-    }
-}
 
-/// Swap brick materials as their health changes (cracked / burned look).
-/// Only writes the material when the damage bucket actually changes, so moving /
-/// regenerating bricks don't force a re-extraction every frame.
-pub fn update_brick_damage(
-    visuals: Res<ActiveLevelVisuals>,
-    mut q: Query<(&Brick, &mut BrickVisual, &mut MeshMaterial2d<ColorMaterial>), Changed<Brick>>,
-) {
-    for (brick, mut visual, mut mat) in &mut q {
-        if brick.health == 0 {
-            continue;
+        if let Some(mover) = mover {
+            // Start the mover at its initial path position (inside its runway,
+            // so it never spawns overlapping a static brick).
+            let pos = mover.path_pos(mover.phase());
+            spawn.insert(mover);
+            spawn.insert(Transform::from_xyz(pos.x, pos.y, 0.0));
         }
-        let pct = brick.health as f32 / visual.max_health.max(1) as f32;
-        let bucket = damage_bucket(pct);
-        if bucket == visual.bucket {
-            continue;
-        }
-        visual.bucket = bucket;
-        mat.0 = visuals.materials.brick(visual.kind, pct);
     }
 }
 

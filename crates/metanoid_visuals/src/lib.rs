@@ -6,6 +6,7 @@
 //! curtain-reveal loading transition.
 
 pub mod ambient;
+pub mod brick_damage;
 pub mod material;
 pub mod recipe;
 pub mod silhouette;

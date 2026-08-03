@@ -16,15 +16,9 @@ pub struct Brick {
     pub brick_type: BrickType,
     pub health: u32,
     pub max_health: u32,
-    pub move_origin_x: f32,
-    /// Half-amplitude of sine travel (legacy; bounds take priority when set).
-    pub move_range: f32,
-    pub move_speed: f32,
-    pub regen_timer: f32,
-    /// Hard world-space clamp so movers never enter neighbor bricks.
-    pub move_min_x: f32,
-    pub move_max_x: f32,
     pub brick_half_w: f32,
+    pub brick_half_h: f32,
+    pub regen_timer: f32,
 }
 
 impl Default for Brick {
@@ -33,33 +27,23 @@ impl Default for Brick {
             brick_type: BrickType::Normal,
             health: 1,
             max_health: 1,
-            move_origin_x: 0.0,
-            move_range: 0.0,
-            move_speed: 0.0,
-            regen_timer: 0.0,
-            move_min_x: 0.0,
-            move_max_x: 0.0,
             brick_half_w: 40.0,
+            brick_half_h: 15.0,
+            regen_timer: 0.0,
         }
     }
 }
 
 impl Brick {
-    /// Whether this brick must be cleared for the level to complete.
-    ///
-    /// Invincible bricks are ignored. Zero-health bricks are treated as already
-    /// dead (important while despawn is still deferred for the frame).
     pub fn blocks_level_clear(&self) -> bool {
         self.brick_type != BrickType::Invincible && self.health > 0
     }
 
-    /// True for any brick type that can be destroyed by normal play / fireball.
     pub fn is_clearable_type(&self) -> bool {
         self.brick_type != BrickType::Invincible
     }
 }
 
-/// Pure helper used by gameplay systems and unit tests.
 pub fn count_blocking_bricks<'a, I>(bricks: I) -> usize
 where
     I: IntoIterator<Item = &'a Brick>,
@@ -70,8 +54,6 @@ where
         .count()
 }
 
-/// Level is clear when there are no blocking bricks left.
-/// `level_armed` must be true (bricks finished spawning).
 pub fn should_clear_level(level_armed: bool, blocking_remaining: usize) -> bool {
     level_armed && blocking_remaining == 0
 }

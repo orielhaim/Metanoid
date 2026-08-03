@@ -8,8 +8,8 @@ use bevy::image::ImageSampler;
 use bevy::prelude::*;
 use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
 
-use crate::recipe::texture::bake_brick;
-use crate::recipe::{BiomeRecipe, TextureKind};
+use crate::recipe::texture::{bake_brick, bake_powerup, bake_radial_glow, bake_ring};
+use crate::recipe::{BiomeRecipe, BrickMat, TextureKind};
 
 pub const BRICK_TILE_W: u32 = 64;
 pub const BRICK_TILE_H: u32 = 32;
@@ -27,6 +27,16 @@ pub enum BrickMatKind {
 #[derive(Resource, Clone)]
 pub struct ProceduralMaterials {
     bricks: HashMap<(BrickMatKind, u8), Handle<ColorMaterial>>,
+    /// Pristine texture image per brick kind (base for dynamic damage baking).
+    pub base_images: HashMap<BrickMatKind, Handle<Image>>,
+    /// Recipe material spec per brick kind (base color / glow / texture).
+    pub brick_specs: HashMap<BrickMatKind, BrickMat>,
+    /// Soft radial glow sprite (white core -> transparent).
+    pub glow: Handle<Image>,
+    /// Thin soft ring sprite.
+    pub ring: Handle<Image>,
+    /// Distinctive procedural texture per powerup kind.
+    pub powerup_textures: HashMap<metanoid_core::components::powerup::PowerUpKind, Handle<Image>>,
     pub paddle: Handle<ColorMaterial>,
     pub wall: Handle<ColorMaterial>,
     pub ball: Handle<ColorMaterial>,
@@ -39,6 +49,11 @@ impl Default for ProceduralMaterials {
     fn default() -> Self {
         Self {
             bricks: HashMap::new(),
+            base_images: HashMap::new(),
+            brick_specs: HashMap::new(),
+            glow: Handle::default(),
+            ring: Handle::default(),
+            powerup_textures: HashMap::new(),
             paddle: Handle::default(),
             wall: Handle::default(),
             ball: Handle::default(),
@@ -55,6 +70,26 @@ impl ProceduralMaterials {
         let bucket = (health_pct.clamp(0.0, 1.0) * 3.0).round() as u8;
         self.bricks
             .get(&(kind, bucket))
+            .cloned()
+            .unwrap_or_default()
+    }
+
+    pub fn base_image(&self, kind: BrickMatKind) -> Handle<Image> {
+        self.base_images.get(&kind).cloned().unwrap_or_default()
+    }
+
+    /// Recipe material spec for a brick kind.
+    pub fn brick_spec(&self, kind: BrickMatKind) -> Option<&BrickMat> {
+        self.brick_specs.get(&kind)
+    }
+
+    /// Texture for a powerup kind.
+    pub fn powerup_texture(
+        &self,
+        kind: metanoid_core::components::powerup::PowerUpKind,
+    ) -> Handle<Image> {
+        self.powerup_textures
+            .get(&kind)
             .cloned()
             .unwrap_or_default()
     }
@@ -96,8 +131,9 @@ fn brick_bucket_images(
     kind: BrickMatKind,
     mat: &crate::recipe::BrickMat,
     var_seed: u64,
-) -> HashMap<u8, Handle<ColorMaterial>> {
+) -> (HashMap<u8, Handle<ColorMaterial>>, Handle<Image>) {
     let mut out = HashMap::new();
+    let mut pristine: Handle<Image> = Handle::default();
     // damage: 0 (broken) .. 3 (pristine)
     for bucket in 0..=3u8 {
         let damage = match bucket {
@@ -115,10 +151,17 @@ fn brick_bucket_images(
             var_seed ^ (kind as u64 * 0x9E37_79B9),
             damage,
         );
-        let h = material_from_pixels(images, materials, pixels.data, BRICK_TILE_W, BRICK_TILE_H);
+        let image = images.add(image_from_pixels(pixels.data, BRICK_TILE_W, BRICK_TILE_H));
+        if bucket == 3 {
+            pristine = image.clone();
+        }
+        let h = materials.add(ColorMaterial {
+            texture: Some(image),
+            ..default()
+        });
         out.insert(bucket, h);
     }
-    out
+    (out, pristine)
 }
 
 /// Bake every material needed for a level from its recipe.
@@ -128,15 +171,21 @@ pub fn bake_all(
     recipe: &BiomeRecipe,
 ) -> ProceduralMaterials {
     let mut bricks = HashMap::new();
+    let mut base_images = HashMap::new();
+    let mut brick_specs = HashMap::new();
     for (kind, mat) in [
         (BrickMatKind::Normal, &recipe.bricks.normal),
         (BrickMatKind::MultiHit, &recipe.bricks.multihit),
         (BrickMatKind::Invincible, &recipe.bricks.invincible),
         (BrickMatKind::Explosive, &recipe.bricks.explosive),
     ] {
-        for (bucket, handle) in brick_bucket_images(images, materials, kind, mat, recipe.var_seed) {
+        let (bucket_map, pristine) =
+            brick_bucket_images(images, materials, kind, mat, recipe.var_seed);
+        for (bucket, handle) in bucket_map {
             bricks.insert((kind, bucket), handle);
         }
+        base_images.insert(kind, pristine);
+        brick_specs.insert(kind, *mat);
     }
 
     let pixels = |t: TextureKind, base: LinearRgba, glow: LinearRgba, w: u32, h: u32| {
@@ -208,8 +257,49 @@ pub fn bake_all(
     // Sky uses a custom shader material (see sky.rs); this is just the color fallback.
     let sky = materials.add(ColorMaterial::from_color(recipe.sky.top));
 
+    // Shared glow / ring sprites.
+    let glow = images.add(image_from_pixels(bake_radial_glow(64).data, 64, 64));
+    let ring = images.add(image_from_pixels(bake_ring(64, 2.5).data, 64, 64));
+
+    // One distinctive texture per powerup kind.
+    use metanoid_core::components::powerup::PowerUpKind;
+    let mut powerup_textures = HashMap::new();
+    for kind in [
+        PowerUpKind::Fireball,
+        PowerUpKind::MegaBall,
+        PowerUpKind::SplitBall,
+        PowerUpKind::FastBall,
+        PowerUpKind::SlowBall,
+        PowerUpKind::LaserPaddle,
+        PowerUpKind::GrabPaddle,
+        PowerUpKind::ExpandPaddle,
+        PowerUpKind::ShrinkPaddle,
+        PowerUpKind::Shield,
+        PowerUpKind::ExtraLife,
+        PowerUpKind::DoublePoints,
+        PowerUpKind::LevelWarp,
+        PowerUpKind::KillPaddle,
+        PowerUpKind::TimeSlow,
+        PowerUpKind::FallingBricks,
+        PowerUpKind::Zap,
+        PowerUpKind::Explode,
+        PowerUpKind::ExpandExploding,
+        PowerUpKind::Lightning,
+        PowerUpKind::Shockwave,
+        PowerUpKind::ShuffleBricks,
+        PowerUpKind::Blackout,
+    ] {
+        let img = images.add(image_from_pixels(bake_powerup(kind, 32).data, 32, 32));
+        powerup_textures.insert(kind, img);
+    }
+
     ProceduralMaterials {
         bricks,
+        base_images,
+        brick_specs,
+        glow,
+        ring,
+        powerup_textures,
         paddle,
         wall,
         ball,

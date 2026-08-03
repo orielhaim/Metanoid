@@ -9,6 +9,7 @@ use crate::difficulty::curve::{DifficultyParams, compute_difficulty};
 use crate::level::composer::compose_level_sized;
 use crate::level::data::{BrickData, LevelDefinition, SpecialType};
 use crate::level::metrics::{brick_metrics_for, level_progress};
+use crate::level::motion::{BrickMotion, generate_motion};
 use crate::seed::hierarchy::{LevelSeed, MasterSeed};
 use crate::universe::galaxy::GalaxyDefinition;
 use crate::universe::progression::LEVELS_PER_BIOME;
@@ -67,6 +68,8 @@ pub fn generate_level_at(master_seed: u64, galaxy: u64, biome: u64, level: u64) 
     apply_difficulty_post(&mut definition, &difficulty, is_boss, &mut rng);
     // Movers only where there is open runway
     sanitize_movers(&mut definition);
+    // Give every remaining mover a full motion spec (shape + speed profile).
+    assign_motions(&mut definition, progress, &biome_params, &mut rng);
 
     GeneratedLevel {
         definition,
@@ -74,6 +77,31 @@ pub fn generate_level_at(master_seed: u64, galaxy: u64, biome: u64, level: u64) 
         difficulty,
         level_seed,
         is_boss,
+    }
+}
+
+/// Assign a motion spec to every moving brick, sized to the free runway around
+/// it. Bricks without enough room are demoted to static.
+fn assign_motions(
+    level: &mut LevelDefinition,
+    progress: f32,
+    params: &BiomeParams,
+    rng: &mut impl Rng,
+) {
+    let bricks = level.bricks.clone();
+    for brick in level.bricks.iter_mut() {
+        if brick.special != SpecialType::Moving {
+            continue;
+        }
+        let (left, right) = free_run_cells(&bricks, brick.col, brick.row);
+        if left + right < 1 {
+            brick.special = SpecialType::None;
+            brick.motion = None;
+            continue;
+        }
+        let (up, down) = free_vertical_cells(&bricks, brick.col, brick.row);
+        let motion: BrickMotion = generate_motion(rng, progress, params.chaos, up, down);
+        brick.motion = Some(motion);
     }
 }
 
@@ -214,6 +242,40 @@ pub fn horizontal_clearance(bricks: &[BrickData], col: usize, row: usize) -> (bo
     (l > 0, r > 0)
 }
 
+/// Count consecutive empty cells above / below on the same column.
+pub fn free_vertical_cells(bricks: &[BrickData], col: usize, row: usize) -> (usize, usize) {
+    let occupied = |c: usize, r: usize| bricks.iter().any(|b| b.col == c && b.row == r);
+
+    let mut up = 0usize;
+    let mut r = row;
+    while r > 0 {
+        r -= 1;
+        if occupied(col, r) {
+            break;
+        }
+        up += 1;
+    }
+
+    let mut down = 0usize;
+    r = row;
+    let max_r = bricks.iter().map(|b| b.row).max().unwrap_or(row);
+    let cap = max_r + 4;
+    loop {
+        r += 1;
+        if r > cap {
+            break;
+        }
+        if occupied(col, r) {
+            break;
+        }
+        down += 1;
+        if down > 20 {
+            break;
+        }
+    }
+    (up, down)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -312,5 +374,54 @@ mod tests {
             let g = generate_level_at(42, 0, 0, level);
             assert!(g.definition.destructible_count() > 0, "level {level} empty");
         }
+    }
+
+    #[test]
+    fn movers_have_motion() {
+        let master = 42u64;
+        let mut any_mover = false;
+        for level in 0..LEVELS_PER_BIOME {
+            let g = generate_level_at(master, 0, 0, level);
+            for b in &g.definition.bricks {
+                if b.special == SpecialType::Moving {
+                    any_mover = true;
+                    assert!(
+                        b.motion.is_some(),
+                        "moving brick missing motion at level {level} c{} r{}",
+                        b.col,
+                        b.row
+                    );
+                } else {
+                    assert!(
+                        b.motion.is_none(),
+                        "static brick has motion at level {level}"
+                    );
+                }
+            }
+        }
+        assert!(any_mover, "expected at least one mover across 12 levels");
+    }
+
+    #[test]
+    fn deep_levels_have_faster_movers() {
+        let early = generate_level_at(7, 0, 0, 2);
+        let late = generate_level_at(7, 0, 0, 10);
+        let avg_speed = |g: &GeneratedLevel| -> f32 {
+            let mut sum = 0.0f32;
+            let mut n = 0usize;
+            for b in &g.definition.bricks {
+                if let Some(m) = b.motion {
+                    sum += m.base_speed;
+                    n += 1;
+                }
+            }
+            if n == 0 { 0.0 } else { sum / n as f32 }
+        };
+        assert!(
+            avg_speed(&late) > avg_speed(&early),
+            "late {} should be faster than early {}",
+            avg_speed(&late),
+            avg_speed(&early)
+        );
     }
 }
